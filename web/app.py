@@ -156,10 +156,15 @@ async def get_record(record_id: int, db: Session = Depends(get_db)):
             
     return response_data
 
+from datetime import datetime, date
+
+# ... (imports)
+
 @app.post("/api/records/save")
 async def save_record(data: Dict[str, Any], db: Session = Depends(get_db)):
     """
-    Save medical record using Relational Skeleton + JSONB Flesh pattern
+    Save medical record using Relational Skeleton + JSONB Flesh pattern.
+    If a record exists for the same patient on the same day, update it instead of creating new.
     """
     try:
         # Extract Relational Skeleton data
@@ -213,7 +218,16 @@ async def save_record(data: Dict[str, Any], db: Session = Depends(get_db)):
                  patient.pinyin = "".join(lazy_pinyin(patient.name, style=Style.FIRST_LETTER))
                  db.commit()
             
-        # 2. Create Medical Record
+        # 2. Create or Update Medical Record
+        # Check if record exists for today
+        from sqlalchemy import func
+        today = date.today()
+        
+        existing_record = db.query(MedicalRecord).filter(
+            MedicalRecord.patient_id == patient.id,
+            func.date(MedicalRecord.visit_date) == today
+        ).first()
+        
         # Relational Skeleton
         complaint = medical_info.get("complaint")
         
@@ -224,17 +238,30 @@ async def save_record(data: Dict[str, Any], db: Session = Depends(get_db)):
             "raw_input": data
         }
         
-        new_record = MedicalRecord(
-            patient_id=patient.id,
-            complaint=complaint,
-            data=record_data
-        )
+        if existing_record:
+            # Update existing record
+            existing_record.complaint = complaint
+            existing_record.data = record_data
+            existing_record.updated_at = datetime.now()
+            record_id = existing_record.id
+            message = "Record updated successfully"
+        else:
+            # Create new record
+            new_record = MedicalRecord(
+                patient_id=patient.id,
+                complaint=complaint,
+                data=record_data
+            )
+            db.add(new_record)
+            record_id = None # Will be set after commit
+            message = "Record saved successfully"
         
-        db.add(new_record)
         db.commit()
-        db.refresh(new_record)
+        if not record_id and 'new_record' in locals():
+            db.refresh(new_record)
+            record_id = new_record.id
         
-        return {"status": "success", "message": "Record saved successfully", "record_id": new_record.id}
+        return {"status": "success", "message": message, "record_id": record_id}
         
     except Exception as e:
         db.rollback()
@@ -255,10 +282,35 @@ async def analyze_record(data: Dict[str, Any]):
     prescription = medical_record.get("prescription", "")
     
     # 1. Parse Pulse Data
-    # Extract key qualities from the grid
-    fu_qualities = [pulse_grid.get(k, "") for k in ["cun-fu", "guan-fu", "chi-fu"]]
-    zhong_qualities = [pulse_grid.get(k, "") for k in ["cun-zhong", "guan-zhong", "chi-zhong"]]
-    chen_qualities = [pulse_grid.get(k, "") for k in ["cun-chen", "guan-chen", "chi-chen"]]
+    # Extract key qualities from the grid (Now supporting left/right)
+    # Helper to aggregate from both hands
+    def get_qualities(pos, level):
+        # Check specific left/right keys first, fallback to generic if not found (legacy support)
+        vals = []
+        for side in ["left", "right"]:
+            key = f"{side}-{pos}-{level}"
+            val = pulse_grid.get(key, "").strip()
+            if val: vals.append(val)
+        
+        # Also check legacy generic keys
+        legacy_key = f"{pos}-{level}"
+        legacy_val = pulse_grid.get(legacy_key, "").strip()
+        if legacy_val: vals.append(legacy_val)
+        
+        return vals
+
+    fu_qualities = []
+    for p in ["cun", "guan", "chi"]:
+        fu_qualities.extend(get_qualities(p, "fu"))
+        
+    zhong_qualities = []
+    for p in ["cun", "guan", "chi"]:
+        zhong_qualities.extend(get_qualities(p, "zhong"))
+        
+    chen_qualities = []
+    for p in ["cun", "guan", "chi"]:
+        chen_qualities.extend(get_qualities(p, "chen"))
+        
     overall_pulse = pulse_grid.get("overall_description", "")
     
     # Helper to check keywords in a list of strings
@@ -386,11 +438,20 @@ async def search_similar_records(data: Dict[str, Any], db: Session = Depends(get
     candidates = db.query(MedicalRecord).order_by(MedicalRecord.created_at.desc()).limit(100).all()
     
     results = []
-    grid_keys = [
+    # Expanded grid keys for 18 positions (plus legacy support)
+    base_positions = [
         "cun-fu", "guan-fu", "chi-fu",
         "cun-zhong", "guan-zhong", "chi-zhong",
         "cun-chen", "guan-chen", "chi-chen"
     ]
+    
+    grid_keys = []
+    # Add left/right versions
+    for pos in base_positions:
+        grid_keys.append(f"left-{pos}")
+        grid_keys.append(f"right-{pos}")
+        # Add legacy version just in case
+        grid_keys.append(pos)
     
     for record in candidates:
         if not record.data or "pulse_grid" not in record.data:

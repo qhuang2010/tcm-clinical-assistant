@@ -332,36 +332,34 @@ textarea.form-control {
 .pulse-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 0; /* Remove gap between cells */
   background: transparent;
   padding: 0;
 }
 
 .grid-input-cell {
-  background: #ffffff !important; /* Enforce white background */
-  aspect-ratio: 1;
+  background: #ffffff !important;
+  aspect-ratio: 2.2; /* Make cells flatter */
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  /* border-radius: 12px;  Remove radius for seamless look */
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: none; /* Remove individual shadow */
+  border: 1px solid rgba(0, 0, 0, 0.1); /* Slightly stronger border */
+  transition: background-color 0.2s;
+  margin: -1px -1px 0 0; /* Collapse borders */
 }
 
 .grid-input-cell:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  transform: none; /* Disable transform */
+  background-color: #f9f9fa !important;
+  z-index: 1; /* Bring to front on hover */
+  position: relative;
 }
 
 .cell-label {
-  font-size: 0.75rem;
-  color: var(--apple-text-secondary);
-  padding: 8px 4px;
-  background: #f5f5f7; /* Light gray Apple style */
-  text-align: center;
-  font-weight: 500;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  /* Hide labels as requested in previous step, but keep css for fallback */
+  display: none; 
 }
 
 .cell-textarea {
@@ -369,13 +367,17 @@ textarea.form-control {
   width: 100%;
   border: none;
   resize: none;
-  padding: 8px;
-  font-size: 1rem;
+  padding: 4px; /* Reduce padding */
+  font-size: 0.95rem; /* Slightly smaller font */
   text-align: center;
   color: var(--apple-text);
   font-weight: 500;
-  background-color: transparent !important; /* Ensure transparency */
-  overflow: hidden; /* Hide scrollbar */
+  background-color: transparent !important;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
 }
 
 .cell-textarea:focus {

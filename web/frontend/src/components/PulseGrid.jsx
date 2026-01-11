@@ -4,17 +4,32 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
   const [similarRecords, setSimilarRecords] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
 
-  const positions = [
-    { label: '寸浮', id: 'cun-fu' },
-    { label: '关浮', id: 'guan-fu' },
-    { label: '尺浮', id: 'chi-fu' },
-    { label: '寸中', id: 'cun-zhong' },
-    { label: '关中', id: 'guan-zhong' },
-    { label: '尺中', id: 'chi-zhong' },
-    { label: '寸沉', id: 'cun-chen' },
-    { label: '关沉', id: 'guan-chen' },
-    { label: '尺沉', id: 'chi-chen' },
+  const leftPositions = [
+    { label: '寸浮', id: 'left-cun-fu', hideLabel: true },
+    { label: '关浮', id: 'left-guan-fu', hideLabel: true },
+    { label: '尺浮', id: 'left-chi-fu', hideLabel: true },
+    { label: '寸中', id: 'left-cun-zhong', hideLabel: true },
+    { label: '关中', id: 'left-guan-zhong', hideLabel: true },
+    { label: '尺中', id: 'left-chi-zhong', hideLabel: true },
+    { label: '寸沉', id: 'left-cun-chen', hideLabel: true },
+    { label: '关沉', id: 'left-guan-chen', hideLabel: true },
+    { label: '尺沉', id: 'left-chi-chen', hideLabel: true },
   ];
+
+  const rightPositions = [
+    { label: '寸浮', id: 'right-cun-fu', hideLabel: true },
+    { label: '关浮', id: 'right-guan-fu', hideLabel: true },
+    { label: '尺浮', id: 'right-chi-fu', hideLabel: true },
+    { label: '寸中', id: 'right-cun-zhong', hideLabel: true },
+    { label: '关中', id: 'right-guan-zhong', hideLabel: true },
+    { label: '尺中', id: 'right-chi-zhong', hideLabel: true },
+    { label: '寸沉', id: 'right-cun-chen', hideLabel: true },
+    { label: '关沉', id: 'right-guan-chen', hideLabel: true },
+    { label: '尺沉', id: 'right-chi-chen', hideLabel: true },
+  ];
+
+  // Helper to migrate old keys if necessary (optional)
+  // For now, we assume data comes in correct format or we map it on display
 
   const handleCellChange = (id, value) => {
     onChange({ ...data, [id]: value });
@@ -76,19 +91,44 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
         />
       </div>
 
-      <div className="pulse-grid">
-        {positions.map((pos) => (
-          <div key={pos.id} className="grid-input-cell">
-            <div className="cell-label">{pos.label}</div>
-            <textarea 
-              className="cell-textarea" 
-              placeholder="输入脉象"
-              value={data[pos.id] || ''}
-              onChange={(e) => handleCellChange(pos.id, e.target.value)}
-            ></textarea>
+      <div className="pulse-grid-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '20px' }}>
+        
+        {/* Left Hand */}
+        <div className="hand-section">
+          <div style={{ textAlign: 'center', marginBottom: '8px', color: 'var(--apple-blue)', fontWeight: '600' }}>左手 (Left)</div>
+          <div className="pulse-grid">
+            {leftPositions.map((pos) => (
+              <div key={pos.id} className="grid-input-cell">
+                <textarea 
+                  className="cell-textarea" 
+                  placeholder={pos.label}
+                  value={data[pos.id] || ''}
+                  onChange={(e) => handleCellChange(pos.id, e.target.value)}
+                ></textarea>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+
+        {/* Right Hand */}
+        <div className="hand-section">
+          <div style={{ textAlign: 'center', marginBottom: '8px', color: 'var(--apple-blue)', fontWeight: '600' }}>右手 (Right)</div>
+          <div className="pulse-grid">
+            {rightPositions.map((pos) => (
+              <div key={pos.id} className="grid-input-cell">
+                <textarea 
+                  className="cell-textarea" 
+                  placeholder={pos.label}
+                  value={data[pos.id] || ''}
+                  onChange={(e) => handleCellChange(pos.id, e.target.value)}
+                ></textarea>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
+
       <button className="btn-primary" onClick={onSave}>
         保存病历
       </button>
@@ -126,34 +166,55 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
                 </div>
                 
                 {/* Mini Grid for Visualization */}
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(3, 1fr)', 
-                  gap: '4px', 
-                  marginBottom: '8px',
-                  opacity: 0.9
-                }}>
-                  {positions.map(pos => {
-                    const isMatch = record.matches && record.matches.includes(pos.id);
-                    const val = record.pulse_grid[pos.id] || '';
-                    return (
-                      <div key={pos.id} style={{
-                        background: isMatch ? 'rgba(0, 113, 227, 0.15)' : '#fff',
-                        border: isMatch ? '1px solid rgba(0, 113, 227, 0.3)' : '1px solid #eee',
-                        borderRadius: '4px',
-                        padding: '4px',
-                        fontSize: '0.7rem',
-                        textAlign: 'center',
-                        minHeight: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: isMatch ? 'var(--apple-blue)' : '#666'
-                      }}>
-                        {val || '-'}
-                      </div>
-                    );
-                  })}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px', opacity: 0.9 }}>
+                  {/* Left Hand Mini */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {leftPositions.map(pos => {
+                      const isMatch = record.matches && record.matches.includes(pos.id);
+                      const val = record.pulse_grid[pos.id] || '';
+                      return (
+                        <div key={pos.id} style={{
+                          background: isMatch ? 'rgba(0, 113, 227, 0.15)' : '#fff',
+                          border: isMatch ? '1px solid rgba(0, 113, 227, 0.3)' : '1px solid #eee',
+                          borderRadius: '4px',
+                          padding: '4px',
+                          fontSize: '0.7rem',
+                          textAlign: 'center',
+                          minHeight: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: isMatch ? 'var(--apple-blue)' : '#666'
+                        }}>
+                          {val || '-'}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Right Hand Mini */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {rightPositions.map(pos => {
+                      const isMatch = record.matches && record.matches.includes(pos.id);
+                      const val = record.pulse_grid[pos.id] || '';
+                      return (
+                        <div key={pos.id} style={{
+                          background: isMatch ? 'rgba(0, 113, 227, 0.15)' : '#fff',
+                          border: isMatch ? '1px solid rgba(0, 113, 227, 0.3)' : '1px solid #eee',
+                          borderRadius: '4px',
+                          padding: '4px',
+                          fontSize: '0.7rem',
+                          textAlign: 'center',
+                          minHeight: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: isMatch ? 'var(--apple-blue)' : '#666'
+                        }}>
+                          {val || '-'}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 
                 <div style={{ fontSize: '0.8rem', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
