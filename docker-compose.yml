@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./sql_app.db:/app/sql_app.db
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Flutter Mobile Build Environment
+  flutter-build:
+    image: cirrusci/flutter:stable
+    volumes:
+      - ./mobile_app:/workspace
+    working_dir: /workspace
+    command: >
+      sh -c "
+        flutter pub get &&
+        flutter pub run build_runner build --delete-conflicting-outputs &&
+        flutter build apk --release
+      "
+    profiles:
+      - build
+
+volumes:
+  flutter-cache:
+    android-cache:
+
+networks:
+  default:
+    name: zhongyi_medic_network

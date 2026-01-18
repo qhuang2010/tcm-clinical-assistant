@@ -1,0 +1,63 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '14.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root = File.expand_path('~/flutter')
+if ENV['FLUTTER_ROOT'] != nil
+  flutter_root = ENV['FLUTTER_ROOT']
+end
+
+if File.exist?(File.join(flutter_root, '.git')) || File.exist?(File.join(flutter_root, '.gclient'))
+  abort("Don't use 'git clone' for Flutter! Use 'git clone' or 'flutter create' instead.")
+end
+
+def flutter_framework_path
+  if File.exist?(File.join(flutter_root, '.git'))
+    "#{flutter_root}/bin/cache/artifacts/engine/ios"
+  else
+    "#{flutter_root}/bin/cache/artifacts/engine/ios"
+  end
+end
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_ios_pod_pods File.dirname(File.realpath(__FILE__))
+  target 'Runner' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+    end
+  end
+end
+
+# Flutter SDK configuration
+def flutter_install_ios_pod_pods(file_path)
+  symlink_dir = File.expand_path('~/Library/Development/flutter/flutter_build_scripts')
+  Pod::UI.warn "Running script: #{file_path}" if verbose
+  unless File.directory?(symlink_dir)
+    FileUtils.mkdir_p(symlink_dir)
+  end
+  script_path = File.join(symlink_dir, File.basename(file_path))
+  unless File.exist?(script_path)
+    FileUtils.ln_sf(file_path, script_path)
+  end
+  script_path
+end

@@ -13,6 +13,9 @@
 - 🏥 **中医专业**：支持中医脉象专业术语和符号识别
 - 🔧 **易于部署**：提供完整的训练、推理和Web界面
 - 📈 **数据管理**：支持数据集准备、标注和预处理
+- 📱 **跨平台移动应用**：支持Android、iOS和HarmonyOS
+- ☁️ **云端AI推理**：基于FastAPI的高性能API服务
+- 🔄 **混合架构**：云端分析 + 本地缓存
 
 ## 项目结构
 
@@ -36,6 +39,18 @@
 │   ├── static/                 # 静态资源
 │   ├── templates/              # HTML模板
 │   └── app.py                  # Web应用
+├── mobile_app/                 # 移动应用 (Flutter)
+│   ├── lib/                    # Flutter源码
+│   ├── android/                # Android配置
+│   ├── ios/                    # iOS配置
+│   ├── harmonyos/              # 鸿蒙OS配置
+│   └── pubspec.yaml            # Flutter依赖
+├── scripts/                    # 工具脚本
+│   └── build_mobile.sh         # 移动应用构建脚本
+└── docs/                       # 文档
+    ├── QUICK_START.md           # 快速开始指南
+    ├── DEPLOYMENT_GUIDE.md      # 部署指南
+    └── PROJECT_CONVERSION_SUMMARY.md  # 项目转换总结
 └── tests/                      # 测试文件
 ```
 
@@ -77,9 +92,29 @@
    ```
 
 4. **使用Web界面**：
-   - 访问 `http://localhost:8000`
-   - 上传九宫格图像
-   - 查看识别结果
+    - 访问 `http://localhost:8000`
+    - 上传九宫格图像
+    - 查看识别结果
+
+### 移动应用
+
+5. **运行移动应用**（Flutter）：
+    ```bash
+    cd mobile_app
+    flutter pub get
+    flutter run
+    ```
+    详见 [移动应用文档](mobile_app/README.md) 和 [快速开始指南](docs/QUICK_START.md)
+
+6. **构建发布版本**：
+    ```bash
+    # Android
+    flutter build apk --release
+    # iOS
+    flutter build ios --release
+    # HarmonyOS
+    flutter build harmonyos --release
+    ```
 
 ## 配置说明
 
@@ -93,11 +128,20 @@
 
 ## 技术栈
 
+### 后端
 - **深度学习框架**: PyTorch, Transformers
 - **OCR模型**: DeepSeek-OCR
 - **Web框架**: FastAPI
-- **前端**: HTML/CSS/JavaScript
+- **Web前端**: HTML/CSS/JavaScript
 - **数据处理**: OpenCV, Pillow, Albumentations
+- **数据库**: SQLite, SQLAlchemy
+
+### 移动应用 (Flutter)
+- **UI框架**: Flutter SDK 3.0+
+- **状态管理**: Provider
+- **网络请求**: Dio
+- **本地存储**: SQLite, SharedPreferences
+- **支持平台**: Android, iOS, HarmonyOS
 
 ## 许可证
 
@@ -106,3 +150,10 @@ MIT License
 ## 联系方式
 
 如有问题或建议，请提交Issue或Pull Request。
+
+## 相关文档
+
+- 📱 [移动应用README](mobile_app/README.md) - 移动应用详细文档
+- 🚀 [快速开始指南](docs/QUICK_START.md) - 10分钟快速上手
+- 📚 [部署指南](docs/DEPLOYMENT_GUIDE.md) - 完整部署文档
+- 📝 [项目转换总结](docs/PROJECT_CONVERSION_SUMMARY.md) - Web到移动的转换详情
