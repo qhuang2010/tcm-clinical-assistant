@@ -333,9 +333,7 @@ function App() {
               </button>
             </div>
 
-            {analysisResult && (
-              <AIAnalysis result={analysisResult} />
-            )}
+            <AIAnalysis data={analysisResult} onAnalyze={handleAnalyze} />
           </div>
 
           <div className="right-panel">

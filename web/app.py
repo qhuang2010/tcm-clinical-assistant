@@ -72,60 +72,9 @@ async def get_patients_by_date(
 ):
     """
     Get patients who had a medical record within a date range.
-    If only one date is provided, it will be used as both start and end.
-    If no dates are provided, defaults to today.
     """
     try:
-        from sqlalchemy import func
-        
-        # Handle backwards compatibility and defaults
-        if start_date and end_date:
-            start = datetime.strptime(start_date, "%Y-%m-%d").date()
-            end = datetime.strptime(end_date, "%Y-%m-%d").date()
-        elif date:
-            # Legacy single date parameter
-            start = datetime.strptime(date, "%Y-%m-%d").date()
-            end = start
-        elif start_date:
-            start = datetime.strptime(start_date, "%Y-%m-%d").date()
-            end = start
-        elif end_date:
-            end = datetime.strptime(end_date, "%Y-%m-%d").date()
-            start = end
-        else:
-            # Default to today
-            start = datetime.now().date()
-            end = start
-        
-        # Ensure start <= end
-        if start > end:
-            start, end = end, start
-        
-        # Query MedicalRecords within date range, join with Patient
-        records = db.query(MedicalRecord).join(Patient).filter(
-            func.date(MedicalRecord.visit_date) >= start,
-            func.date(MedicalRecord.visit_date) <= end
-        ).order_by(MedicalRecord.visit_date.desc()).all()
-        
-        # Deduplicate patients
-        seen_patients = set()
-        result_patients = []
-        
-        for r in records:
-            p = r.patient
-            if p.id not in seen_patients:
-                seen_patients.add(p.id)
-                result_patients.append({
-                    "id": p.id,
-                    "name": p.name,
-                    "gender": p.gender,
-                    "age": p.age,
-                    "phone": p.phone,
-                    "last_visit": r.visit_date.strftime("%Y-%m-%d")
-                })
-                
-        return result_patients
-        
+        return search_service.get_patients_by_date_range(db, start_date, end_date, date)
     except ValueError:
          raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 

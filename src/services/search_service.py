@@ -1,7 +1,57 @@
 from typing import Dict, Any, List
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from src.database.models import Patient, MedicalRecord
+
+def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date_str: str = None, single_date_str: str = None) -> List[Dict[str, Any]]:
+    """
+    Business logic for finding patients within a date range.
+    """
+    from sqlalchemy import func
+    
+    # Handle dates and defaults
+    if start_date_str and end_date_str:
+        start = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    elif single_date_str:
+        start = datetime.strptime(single_date_str, "%Y-%m-%d").date()
+        end = start
+    elif start_date_str:
+        start = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end = start
+    elif end_date_str:
+        end = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        start = end
+    else:
+        start = datetime.now().date()
+        end = start
+        
+    if start > end:
+        start, end = end, start
+        
+    records = db.query(MedicalRecord).join(Patient).filter(
+        func.date(MedicalRecord.visit_date) >= start,
+        func.date(MedicalRecord.visit_date) <= end
+    ).order_by(MedicalRecord.visit_date.desc()).all()
+    
+    seen_patients = set()
+    result_patients = []
+    
+    for r in records:
+        p = r.patient
+        if p.id not in seen_patients:
+            seen_patients.add(p.id)
+            result_patients.append({
+                "id": p.id,
+                "name": p.name,
+                "gender": p.gender,
+                "age": p.age,
+                "phone": p.phone,
+                "last_visit": r.visit_date.strftime("%Y-%m-%d")
+            })
+            
+    return result_patients
 
 def search_patients(db: Session, query: str) -> List[Dict[str, Any]]:
     if not query:
