@@ -5,7 +5,7 @@ from datetime import datetime, date
 from src.database.models import Patient, MedicalRecord, Practitioner
 from pypinyin import lazy_pinyin, Style
 
-def save_medical_record(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
+def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) -> Dict[str, Any]:
     """
     Business logic for saving or updating a medical record.
     Uses Relational Skeleton + JSONB Flesh pattern.
@@ -80,7 +80,8 @@ def save_medical_record(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
         "client_info": { 
             "mode": mode,
             "teacher": teacher_name,
-            "practitioner_id": practitioner_id
+            "practitioner_id": practitioner_id,
+            "user_id": user_id
         }
     }
     
@@ -88,6 +89,7 @@ def save_medical_record(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
         existing_record.complaint = complaint
         existing_record.data = record_data
         existing_record.practitioner_id = practitioner_id
+        existing_record.user_id = user_id # Track who updated it
         existing_record.updated_at = datetime.now()
         record_id = existing_record.id
         message = "Record updated successfully"
@@ -96,7 +98,8 @@ def save_medical_record(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
             patient_id=patient.id,
             complaint=complaint,
             data=record_data,
-            practitioner_id=practitioner_id
+            practitioner_id=practitioner_id,
+            user_id=user_id
         )
         db.add(new_record)
         db.flush() # To get the ID before commit if needed

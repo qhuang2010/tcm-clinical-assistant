@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
+const PulseGrid = ({ data, token, onChange, onSave, onLoadRecord }) => {
   const [similarRecords, setSimilarRecords] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
 
@@ -55,7 +55,10 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
     try {
       const response = await fetch('/api/records/search_similar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ pulse_grid: data })
       });
       if (response.ok) {
@@ -72,15 +75,15 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
   return (
     <div className="grid-wrapper">
       <div className="grid-title">脉象九宫格录入</div>
-      
+
       <div className="overall-pulse-section" style={{ marginBottom: '15px' }}>
         <div style={{ marginBottom: '8px', fontSize: '0.9rem', color: 'var(--apple-text-secondary)', fontWeight: '500' }}>
           整体脉象
         </div>
         <textarea
           className="form-control"
-          style={{ 
-            minHeight: '60px', 
+          style={{
+            minHeight: '60px',
             resize: 'none',
             fontSize: '0.95rem',
             padding: '10px'
@@ -92,15 +95,15 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
       </div>
 
       <div className="pulse-grid-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '20px' }}>
-        
+
         {/* Left Hand */}
         <div className="hand-section">
           <div style={{ textAlign: 'center', marginBottom: '8px', color: 'var(--apple-blue)', fontWeight: '600' }}>左手 (Left)</div>
           <div className="pulse-grid">
             {leftPositions.map((pos) => (
               <div key={pos.id} className="grid-input-cell">
-                <textarea 
-                  className="cell-textarea" 
+                <textarea
+                  className="cell-textarea"
                   placeholder={pos.label}
                   value={data[pos.id] || ''}
                   onChange={(e) => handleCellChange(pos.id, e.target.value)}
@@ -116,8 +119,8 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
           <div className="pulse-grid">
             {rightPositions.map((pos) => (
               <div key={pos.id} className="grid-input-cell">
-                <textarea 
-                  className="cell-textarea" 
+                <textarea
+                  className="cell-textarea"
                   placeholder={pos.label}
                   value={data[pos.id] || ''}
                   onChange={(e) => handleCellChange(pos.id, e.target.value)}
@@ -137,9 +140,9 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
       <div className="similar-records-section" style={{ marginTop: '30px', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '20px' }}>
         <h4 style={{ fontSize: '0.95rem', color: 'var(--apple-text-secondary)', marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
           <span>相似病历推荐</span>
-          {loadingSimilar && <span style={{fontSize: '0.8rem'}}>搜索中...</span>}
+          {loadingSimilar && <span style={{ fontSize: '0.8rem' }}>搜索中...</span>}
         </h4>
-        
+
         {similarRecords.length === 0 ? (
           <div style={{ fontSize: '0.85rem', color: '#999', textAlign: 'center' }}>
             暂无相似病历
@@ -147,8 +150,8 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
         ) : (
           <div className="similar-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {similarRecords.map(record => (
-              <div 
-                key={record.record_id} 
+              <div
+                key={record.record_id}
                 className="similar-card"
                 onClick={() => onLoadRecord && onLoadRecord(record.record_id)}
                 style={{
@@ -164,7 +167,7 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
                   <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{record.patient_name}</span>
                   <span style={{ fontSize: '0.8rem', color: '#888' }}>{record.visit_date}</span>
                 </div>
-                
+
                 {/* Mini Grid for Visualization */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px', opacity: 0.9 }}>
                   {/* Left Hand Mini */}
@@ -216,7 +219,7 @@ const PulseGrid = ({ data, onChange, onSave, onLoadRecord }) => {
                     })}
                   </div>
                 </div>
-                
+
                 <div style={{ fontSize: '0.8rem', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   主诉: {record.complaint || '无'}
                 </div>

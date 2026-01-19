@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DateRangePicker from './DateRangePicker';
 
-const Sidebar = ({ onPatientSelect, onRecordSelect, lastUpdateTime }) => {
+const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => {
   const [query, setQuery] = useState('');
   const [historyUsers, setHistoryUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -21,10 +21,12 @@ const Sidebar = ({ onPatientSelect, onRecordSelect, lastUpdateTime }) => {
 
   // Fetch patients by date range
   const fetchByDate = React.useCallback(async () => {
-    if (!startDate || !endDate) return;
+    if (!startDate || !endDate || !token) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/patients/by_date?start_date=${startDate}&end_date=${endDate}`);
+      const response = await fetch(`/api/patients/by_date?start_date=${startDate}&end_date=${endDate}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (response.ok) {
         const data = await response.json();
         setHistoryUsers(data);
@@ -34,14 +36,14 @@ const Sidebar = ({ onPatientSelect, onRecordSelect, lastUpdateTime }) => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, token]);
 
   // Initial load & Date change effect
   useEffect(() => {
     if (!query.trim()) {
       fetchByDate();
     }
-  }, [fetchByDate, lastUpdateTime]); // Reload when date changes or parent notifies update
+  }, [fetchByDate, lastUpdateTime]);
 
   // Search effect
   useEffect(() => {
@@ -49,7 +51,6 @@ const Sidebar = ({ onPatientSelect, onRecordSelect, lastUpdateTime }) => {
       if (query.trim()) {
         handleSearch();
       } else {
-        // If query cleared, fallback to date filter
         fetchByDate();
       }
     }, 300);
@@ -58,11 +59,13 @@ const Sidebar = ({ onPatientSelect, onRecordSelect, lastUpdateTime }) => {
   }, [query, fetchByDate]);
 
   const handleSearch = async () => {
-    if (!query.trim()) return;
+    if (!query.trim() || !token) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/patients/search?query=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/patients/search?query=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (response.ok) {
         const data = await response.json();
         setHistoryUsers(data);
@@ -80,7 +83,9 @@ const Sidebar = ({ onPatientSelect, onRecordSelect, lastUpdateTime }) => {
 
     // Fetch visit history
     try {
-      const response = await fetch(`/api/patients/${patientId}/history`);
+      const response = await fetch(`/api/patients/${patientId}/history`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (response.ok) {
         const data = await response.json();
         setPatientHistory(data);

@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from src.database.models import Patient, MedicalRecord
 
-def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date_str: str = None, single_date_str: str = None) -> List[Dict[str, Any]]:
+def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date_str: str = None, single_date_str: str = None, user_id: int = None) -> List[Dict[str, Any]]:
     """
     Business logic for finding patients within a date range.
+    If user_id is provided, only returns records belonging to that user.
     """
     from sqlalchemy import func
     
@@ -29,11 +30,18 @@ def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date
         
     if start > end:
         start, end = end, start
-        
-    records = db.query(MedicalRecord).join(Patient).filter(
+    
+    # Build query with user_id filter if provided
+    query = db.query(MedicalRecord).join(Patient).filter(
         func.date(MedicalRecord.visit_date) >= start,
         func.date(MedicalRecord.visit_date) <= end
-    ).order_by(MedicalRecord.visit_date.desc()).all()
+    )
+    
+    # Filter by user_id if provided (non-admin users only see their own data)
+    if user_id is not None:
+        query = query.filter(MedicalRecord.user_id == user_id)
+    
+    records = query.order_by(MedicalRecord.visit_date.desc()).all()
     
     seen_patients = set()
     result_patients = []
@@ -53,17 +61,33 @@ def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date
             
     return result_patients
 
-def search_patients(db: Session, query: str) -> List[Dict[str, Any]]:
+def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[str, Any]]:
+    """
+    Search patients by name or phone number.
+    If user_id is provided, only returns patients with records belonging to that user.
+    """
     if not query:
         return []
     
-    patients = db.query(Patient).filter(
-        or_(
-            Patient.name.ilike(f"%{query}%"),
-            Patient.phone.ilike(f"%{query}%"),
-            Patient.pinyin.ilike(f"%{query}%")
-        )
-    ).limit(20).all()
+    # Base query for patients
+    base_filter = or_(
+        Patient.name.ilike(f"%{query}%"),
+        Patient.phone.ilike(f"%{query}%"),
+        Patient.pinyin.ilike(f"%{query}%")
+    )
+    
+    if user_id is not None:
+        # Find patients who have at least one record belonging to this user
+        patient_ids = db.query(MedicalRecord.patient_id).filter(
+            MedicalRecord.user_id == user_id
+        ).distinct().subquery()
+        
+        patients = db.query(Patient).filter(
+            base_filter,
+            Patient.id.in_(patient_ids)
+        ).limit(20).all()
+    else:
+        patients = db.query(Patient).filter(base_filter).limit(20).all()
     
     return [
         {
@@ -78,10 +102,19 @@ def search_patients(db: Session, query: str) -> List[Dict[str, Any]]:
     ]
 
 def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Search for similar medical records based on pulse grid.
+    Only searches records that have a practitioner (teacher records) for learning reference.
+    """
+    from src.database.models import Practitioner
+    
     if not current_grid:
         return []
-        
-    candidates = db.query(MedicalRecord).order_by(MedicalRecord.created_at.desc()).limit(100).all()
+    
+    # Only search records with a practitioner assigned (teacher's records)
+    candidates = db.query(MedicalRecord).filter(
+        MedicalRecord.practitioner_id.isnot(None)
+    ).order_by(MedicalRecord.created_at.desc()).limit(200).all()
     results = []
     
     base_positions = [
