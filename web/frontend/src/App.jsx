@@ -9,6 +9,7 @@ import ConfirmModal from './components/ConfirmModal';
 import Login from './components/Login';
 import Register from './components/Register';
 import Admin from './components/Admin';
+import DatabaseStatus from './components/DatabaseStatus';
 
 const LOCAL_STORAGE_KEY = 'zhongyimedic_draft';
 
@@ -413,8 +414,9 @@ function App() {
         </div>
       </div>
 
-      <div className="footer">
-        <p>黄谦所有，联系方式：qhuang2010@gmail.com</p>
+      <div className="footer" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexDirection: 'column' }}>
+        <p style={{ margin: 0 }}>黄谦所有，联系方式：qhuang2010@gmail.com</p>
+        <DatabaseStatus />
       </div>
 
       <ConfirmModal

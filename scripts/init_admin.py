@@ -1,17 +1,19 @@
-from sqlalchemy.orm import Session
-from src.database.connection import SessionLocal, engine, Base
-from src.database.models import User
-from src.services import auth_service
 import sys
 import os
 
 # Ensure src is in python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sqlalchemy.orm import Session
+from src.database.connection import SessionLocal, engine, Base
+from src.database.models import User, Patient, MedicalRecord, Practitioner
+from src.services import auth_service
+
 def init_admin():
     db = SessionLocal()
     try:
         # Create tables
+        print(f"Creating tables for: {Base.metadata.tables.keys()}")
         Base.metadata.create_all(bind=engine)
         
         # Check if admin exists

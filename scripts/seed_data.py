@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.database.connection import SessionLocal
-from src.database.models import Patient, MedicalRecord
+from src.database.models import Patient, MedicalRecord, Practitioner
 
 def seed_data():
     db = SessionLocal()
@@ -15,6 +15,16 @@ def seed_data():
     try:
         print("Seeding data...")
         
+        # Seed Practitioners (Teachers)
+        practitioners_data = ["张仲景", "孙思邈", "李时珍", "叶天士"]
+        for p_name in practitioners_data:
+            existing = db.query(Practitioner).filter(Practitioner.name == p_name).first()
+            if not existing:
+                new_p = Practitioner(name=p_name, role="teacher")
+                db.add(new_p)
+                db.commit() # Commit immediately
+                print(f"Added practitioner: {p_name}")
+
         # Test Data
         patients_data = [
             ("李明", "男", 34, "13800138001", "长期加班，颈椎不适"),

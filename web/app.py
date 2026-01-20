@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from uuid import uuid4
 import uvicorn
 from pypinyin import lazy_pinyin, Style
@@ -46,6 +46,19 @@ async def read_root():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return HTMLResponse(content="<h1>Frontend build not found. Please run 'npm run build' in web/frontend</h1>", status_code=404)
+
+@app.get("/api/health")
+async def health_check(db: Session = Depends(get_db)):
+    """
+    Check database connection status
+    """
+    try:
+        # Execute a simple query to check connection
+        db.execute(text("SELECT 1"))
+        return {"status": "connected", "database": "online"}
+    except Exception as e:
+        print(f"Health check failed: {e}")
+        return {"status": "disconnected", "error": str(e)}
 
 # Auth Endpoints
 @app.post("/api/auth/login")
