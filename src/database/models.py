@@ -1,10 +1,26 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index, Boolean
 from sqlalchemy.types import JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, declarative_mixin
 from datetime import datetime
+import uuid
 from .connection import Base
 
-class User(Base):
+@declarative_mixin
+class SyncMixin:
+    """Mixin to add sync-related columns to models."""
+    # Global Unique ID for sync matching
+    uuid = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()), nullable=False)
+    
+    # Sync status: 'pending', 'synced', 'failed'
+    sync_status = Column(String, default='pending', index=True)
+    
+    # Last time this record was synced
+    last_synced_at = Column(DateTime, nullable=True)
+    
+    # Soft delete flag for sync propagation
+    is_deleted = Column(Boolean, default=False, index=True)
+
+class User(Base, SyncMixin):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -24,7 +40,7 @@ class User(Base):
 
     records = relationship("MedicalRecord", back_populates="user")
 
-class Patient(Base):
+class Patient(Base, SyncMixin):
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -42,7 +58,7 @@ class Patient(Base):
 
     records = relationship("MedicalRecord", back_populates="patient")
 
-class Practitioner(Base):
+class Practitioner(Base, SyncMixin):
     __tablename__ = "practitioners"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -52,7 +68,7 @@ class Practitioner(Base):
 
     records = relationship("MedicalRecord", back_populates="practitioner")
 
-class MedicalRecord(Base):
+class MedicalRecord(Base, SyncMixin):
     __tablename__ = "medical_records"
 
     id = Column(Integer, primary_key=True, index=True)

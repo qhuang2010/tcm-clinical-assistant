@@ -1,11 +1,12 @@
-from sqlalchemy.orm import Session
-from src.database.connection import engine, Base
-from src.database.models import User, Patient, MedicalRecord, Practitioner
 import sys
 import os
 
 # Ensure src is in python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sqlalchemy.orm import Session
+from src.database.connection import engine, Base
+from src.database.models import User, Patient, MedicalRecord, Practitioner
 
 def reset_db():
     print("Warning: This will DROP ALL DATA in the database!")

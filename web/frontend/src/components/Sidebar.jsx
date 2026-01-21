@@ -12,11 +12,17 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
   // Date range filter state
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
   const [endDate, setEndDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
 
   // Fetch patients by date range

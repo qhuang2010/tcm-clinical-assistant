@@ -51,13 +51,20 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
     };
 
     const handleQuickSelect = (days) => {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(end.getDate() - days);
+        const calculateDate = (offsetDays) => {
+            const date = new Date();
+            date.setDate(date.getDate() - offsetDays);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
 
-        const formatDate = (d) => d.toISOString().split('T')[0];
-        setTempStartDate(formatDate(start));
-        setTempEndDate(formatDate(end));
+        const endFormatted = calculateDate(0);
+        const startFormatted = calculateDate(days);
+
+        setTempStartDate(startFormatted);
+        setTempEndDate(endFormatted);
     };
 
     const displayText = startDate === endDate

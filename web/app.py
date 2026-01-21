@@ -562,5 +562,38 @@ async def search_similar_records(
     current_grid = data.get("pulse_grid", {})
     return search_service.search_similar_records(db, current_grid)
 
+
+from src.services.sync_service import SyncService
+
+# Initialize Sync Service
+sync_service = SyncService()
+
+@app.get("/api/sync/status")
+async def get_sync_status(
+    current_user: User = Depends(auth_service.get_current_active_user)
+):
+    """
+    Get current synchronization status.
+    """
+    pending_count = sync_service.get_pending_count()
+    return {
+        "status": "online", # We assume app is online if this API is reachable, but we care about Cloud connectivity
+        "pending_count": pending_count,
+        "message": f"{pending_count} records pending upload"
+    }
+
+@app.post("/api/sync/trigger")
+async def trigger_sync(
+    current_user: User = Depends(auth_service.get_current_active_user)
+):
+    """
+    Trigger manual synchronization (Push & Pull).
+    """
+    # Run sync in background or await? For simplicity, await.
+    # In production, use BackgroundTasks.
+    # result = sync_service.sync_up() # Old push-only
+    result = sync_service.sync_all() # New push-pull
+    return result
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
