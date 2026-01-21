@@ -143,12 +143,22 @@ class SyncService:
     def _sync_record_down(self, local_db: Session, cloud_db: Session, model, cloud_record):
         """
         Sync a single record from Cloud to Local.
+        Handles cases where local record exists with different UUID but same unique field.
         """
         local_record = local_db.query(model).filter(model.uuid == cloud_record.uuid).first()
         
         if not local_record:
-            local_record = model()
-            local_db.add(local_record)
+            # Try to find by unique fields before creating new record
+            local_record = self._find_local_by_unique_fields(local_db, model, cloud_record)
+            
+            if local_record:
+                # Found by unique field - update UUID to match cloud
+                logger.info(f"Found existing {model.__tablename__} by unique field, updating UUID")
+                local_record.uuid = cloud_record.uuid
+            else:
+                # Truly new record
+                local_record = model()
+                local_db.add(local_record)
         
         # Check timestamps to decide whether to update
         # If local is pending, DO NOT Overwrite! (Conflict)
@@ -172,6 +182,33 @@ class SyncService:
         local_record.sync_status = 'synced'
         local_record.last_synced_at = datetime.now()
         local_db.commit()
+
+    def _find_local_by_unique_fields(self, local_db: Session, model, cloud_record):
+        """
+        Find a local record by unique field(s) instead of UUID.
+        Used when UUID doesn't match but record may already exist locally.
+        """
+        if model == User:
+            return local_db.query(model).filter(model.username == cloud_record.username).first()
+        elif model == Practitioner:
+            return local_db.query(model).filter(model.name == cloud_record.name).first()
+        elif model == Patient:
+            # Patient uniqueness: combination of name + phone (if phone exists)
+            if cloud_record.phone:
+                return local_db.query(model).filter(
+                    model.name == cloud_record.name,
+                    model.phone == cloud_record.phone
+                ).first()
+            else:
+                return local_db.query(model).filter(model.name == cloud_record.name).first()
+        elif model == MedicalRecord:
+            # Medical records: match by patient + visit_date + created_at
+            return local_db.query(model).filter(
+                model.patient_id == cloud_record.patient_id,
+                model.visit_date == cloud_record.visit_date,
+                model.created_at == cloud_record.created_at
+            ).first()
+        return None
 
     def _resolve_foreign_key_down(self, local_db, cloud_db, model, local_record, cloud_record, fk_column):
         """

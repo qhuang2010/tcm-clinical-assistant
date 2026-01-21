@@ -1,16 +1,55 @@
 from typing import Dict, Any, List
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from src.database.models import Patient, MedicalRecord
+from src.database.connection import SessionLocal, SessionCloud
+import logging
+
+logger = logging.getLogger(__name__)
+
+def _get_cloud_session():
+    """Safely get a Cloud DB session, or None if unavailable."""
+    if SessionCloud:
+        try:
+            return SessionCloud()
+        except Exception as e:
+            logger.warning(f"Could not create cloud session: {e}")
+    return None
+
+def _query_patients_by_date(db: Session, start, end, user_id: int = None) -> List[Dict[str, Any]]:
+    """Helper to query patients from a single database session."""
+    query = db.query(MedicalRecord).join(Patient).filter(
+        func.date(MedicalRecord.visit_date) >= start,
+        func.date(MedicalRecord.visit_date) <= end
+    )
+    
+    if user_id is not None:
+        query = query.filter(MedicalRecord.user_id == user_id)
+    
+    records = query.order_by(MedicalRecord.visit_date.desc()).all()
+    
+    results = []
+    for r in records:
+        p = r.patient
+        if p:
+            results.append({
+                "uuid": p.uuid,  # Use UUID for deduplication
+                "id": p.id,
+                "name": p.name,
+                "gender": p.gender,
+                "age": p.age,
+                "phone": p.phone,
+                "last_visit": r.visit_date.strftime("%Y-%m-%d"),
+                "source": "local" if db == SessionLocal else "cloud"
+            })
+    return results
 
 def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date_str: str = None, single_date_str: str = None, user_id: int = None) -> List[Dict[str, Any]]:
     """
-    Business logic for finding patients within a date range.
-    If user_id is provided, only returns records belonging to that user.
+    Hybrid query: Find patients from BOTH Local and Cloud databases within a date range.
+    Results are merged by UUID. Local records take priority.
     """
-    from sqlalchemy import func
-    
     # Handle dates and defaults
     if start_date_str and end_date_str:
         start = datetime.strptime(start_date_str, "%Y-%m-%d").date()
@@ -31,53 +70,50 @@ def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date
     if start > end:
         start, end = end, start
     
-    # Build query with user_id filter if provided
-    query = db.query(MedicalRecord).join(Patient).filter(
-        func.date(MedicalRecord.visit_date) >= start,
-        func.date(MedicalRecord.visit_date) <= end
-    )
+    # 1. Query Local DB (passed in as 'db')
+    local_results = _query_patients_by_date(db, start, end, user_id)
     
-    # Filter by user_id if provided (non-admin users only see their own data)
-    if user_id is not None:
-        query = query.filter(MedicalRecord.user_id == user_id)
+    # 2. Query Cloud DB (with graceful fallback)
+    cloud_results = []
+    cloud_db = _get_cloud_session()
+    if cloud_db:
+        try:
+            cloud_results = _query_patients_by_date(cloud_db, start, end, user_id)
+        except Exception as e:
+            logger.warning(f"Cloud query failed: {e}")
+        finally:
+            cloud_db.close()
     
-    records = query.order_by(MedicalRecord.visit_date.desc()).all()
+    # 3. Merge: Local takes priority, Cloud supplements
+    seen_uuids = set()
+    merged_results = []
     
-    seen_patients = set()
-    result_patients = []
+    for p in local_results:
+        if p["uuid"] not in seen_uuids:
+            seen_uuids.add(p["uuid"])
+            merged_results.append(p)
     
-    for r in records:
-        p = r.patient
-        if p.id not in seen_patients:
-            seen_patients.add(p.id)
-            result_patients.append({
-                "id": p.id,
-                "name": p.name,
-                "gender": p.gender,
-                "age": p.age,
-                "phone": p.phone,
-                "last_visit": r.visit_date.strftime("%Y-%m-%d")
-            })
-            
-    return result_patients
+    for p in cloud_results:
+        if p["uuid"] not in seen_uuids:
+            seen_uuids.add(p["uuid"])
+            merged_results.append(p)
+    
+    # Sort by last_visit descending
+    merged_results.sort(key=lambda x: x["last_visit"], reverse=True)
+    
+    # Remove internal 'uuid' and 'source' before returning to API (optional, can keep for debug)
+    return [{k: v for k, v in p.items() if k not in ['uuid', 'source']} for p in merged_results]
 
-def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[str, Any]]:
-    """
-    Search patients by name or phone number.
-    If user_id is provided, only returns patients with records belonging to that user.
-    """
-    if not query:
-        return []
-    
-    # Base query for patients
+
+def _query_patients_by_name(db: Session, query_str: str, user_id: int = None) -> List[Dict[str, Any]]:
+    """Helper to search patients from a single database session."""
     base_filter = or_(
-        Patient.name.ilike(f"%{query}%"),
-        Patient.phone.ilike(f"%{query}%"),
-        Patient.pinyin.ilike(f"%{query}%")
+        Patient.name.ilike(f"%{query_str}%"),
+        Patient.phone.ilike(f"%{query_str}%"),
+        Patient.pinyin.ilike(f"%{query_str}%")
     )
     
     if user_id is not None:
-        # Find patients who have at least one record belonging to this user
         patient_ids = db.query(MedicalRecord.patient_id).filter(
             MedicalRecord.user_id == user_id
         ).distinct().subquery()
@@ -91,6 +127,7 @@ def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[s
     
     return [
         {
+            "uuid": p.uuid,
             "id": p.id,
             "name": p.name,
             "gender": p.gender,
@@ -100,6 +137,45 @@ def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[s
         }
         for p in patients
     ]
+
+def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[str, Any]]:
+    """
+    Hybrid search: Find patients from BOTH Local and Cloud databases by name/phone.
+    Results are merged by UUID. Local records take priority.
+    """
+    if not query:
+        return []
+    
+    # 1. Query Local DB
+    local_results = _query_patients_by_name(db, query, user_id)
+    
+    # 2. Query Cloud DB
+    cloud_results = []
+    cloud_db = _get_cloud_session()
+    if cloud_db:
+        try:
+            cloud_results = _query_patients_by_name(cloud_db, query, user_id)
+        except Exception as e:
+            logger.warning(f"Cloud search failed: {e}")
+        finally:
+            cloud_db.close()
+    
+    # 3. Merge by UUID
+    seen_uuids = set()
+    merged_results = []
+    
+    for p in local_results:
+        if p["uuid"] not in seen_uuids:
+            seen_uuids.add(p["uuid"])
+            merged_results.append(p)
+    
+    for p in cloud_results:
+        if p["uuid"] not in seen_uuids:
+            seen_uuids.add(p["uuid"])
+            merged_results.append(p)
+    
+    # Return without internal 'uuid' field
+    return [{k: v for k, v in p.items() if k != 'uuid'} for p in merged_results[:20]]
 
 def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
