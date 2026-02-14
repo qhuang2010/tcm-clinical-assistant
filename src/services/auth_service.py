@@ -5,7 +5,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from src.database.models import User
+from src.database.models import User, MedicalRecord, RecordPermission, Patient
 from src.database.connection import get_db
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
@@ -109,3 +109,53 @@ def delete_user(db: Session, user_id: int):
         db.delete(user)
         db.commit()
     return user
+
+
+def check_patient_permission(db: Session, user: User, patient_id: int, required: str = "read") -> bool:
+    """
+    Check if user has permission to access a patient's records.
+    - admin → always True
+    - user created any record for this patient → True (creator)
+    - record_permissions table has matching grant → True
+    - otherwise → False
+    """
+    if user.role == "admin":
+        return True
+
+    # Check if user is creator of any record for this patient
+    creator_record = db.query(MedicalRecord).filter(
+        MedicalRecord.patient_id == patient_id,
+        MedicalRecord.user_id == user.id
+    ).first()
+    if creator_record:
+        return True
+
+    # Check if user is the patient creator (personal mode)
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if patient and patient.creator_id == user.id:
+        return True
+
+    # Check record_permissions table
+    perm_levels = {"read": ["read", "write"], "write": ["write"]}
+    allowed = perm_levels.get(required, ["read", "write"])
+    grant = db.query(RecordPermission).filter(
+        RecordPermission.user_id == user.id,
+        RecordPermission.patient_id == patient_id,
+        RecordPermission.permission.in_(allowed)
+    ).first()
+    return grant is not None
+
+
+def check_record_permission(db: Session, user: User, record: MedicalRecord, required: str = "read") -> bool:
+    """
+    Check if user has permission on a specific record.
+    - admin → always True
+    - record.user_id == user.id → True (creator)
+    - patient-level permission grant → True
+    - otherwise → False
+    """
+    if user.role == "admin":
+        return True
+    if record.user_id == user.id:
+        return True
+    return check_patient_permission(db, user, record.patient_id, required)

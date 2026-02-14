@@ -99,3 +99,18 @@ class MedicalRecord(Base, SyncMixin):
     patient = relationship("Patient", back_populates="records")
     practitioner = relationship("Practitioner", back_populates="records")
     user = relationship("User", back_populates="records")
+
+class RecordPermission(Base):
+    """Patient-level permission grants between users."""
+    __tablename__ = "record_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    permission = Column(String, nullable=False, default="read")  # 'read' or 'write'
+    granted_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", foreign_keys=[user_id])
+    patient = relationship("Patient")
+    granter = relationship("User", foreign_keys=[granted_by])

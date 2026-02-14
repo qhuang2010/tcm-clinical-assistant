@@ -2015,6 +2015,28 @@ input[type="date"]::-webkit-datetime-edit-fields-wrapper {
   margin-bottom: var(--space-4);
 }
 
+.btn-rotate {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--gray-200);
+  background: white;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-600);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.btn-rotate:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  background: rgba(0, 113, 227, 0.04);
+}
+
 .btn-recognize {
   flex: 1;
   padding: var(--space-3) var(--space-5);
@@ -2262,6 +2284,56 @@ input[type="date"]::-webkit-datetime-edit-fields-wrapper {
 
 .med-card-del:hover {
   color: var(--error);
+}
+
+.med-card-handle {
+  cursor: grab;
+  color: var(--gray-300);
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+  padding: 2px 4px 2px 0;
+  transition: color var(--transition-fast);
+}
+
+.med-card-handle:hover {
+  color: var(--gray-500);
+}
+
+.med-card-handle:active {
+  cursor: grabbing;
+}
+
+.med-card-dragging {
+  opacity: 0.4;
+}
+
+.med-card-dragover {
+  box-shadow: inset 2px 0 0 var(--secondary);
+}
+
+.medicine-input-section {
+  width: 100%;
+}
+
+.btn-add-medicine {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-top: 4px;
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--gray-500);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-add-medicine:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  background: rgba(52, 199, 89, 0.04);
 }
 
 /* Bottom action buttons */

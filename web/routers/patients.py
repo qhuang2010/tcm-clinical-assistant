@@ -44,10 +44,35 @@ async def get_patients_by_date(
     except ValueError:
          raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
+@router.get("/{patient_id}")
+async def get_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_active_user)
+):
+    """
+    Get patient basic info by ID.
+    """
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    if not auth_service.check_patient_permission(db, current_user, patient_id):
+        raise HTTPException(status_code=403, detail="无权访问该患者信息")
+
+    return {
+        "id": patient.id,
+        "name": patient.name,
+        "age": patient.age,
+        "gender": patient.gender,
+        "phone": patient.phone
+    }
+
 @router.get("/{patient_id}/latest_record")
 async def get_patient_latest_record(
-    patient_id: int, 
-    db: Session = Depends(get_db)
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_active_user)
 ):
     """
     Get patient details and their latest medical record
@@ -55,6 +80,9 @@ async def get_patient_latest_record(
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+
+    if not auth_service.check_patient_permission(db, current_user, patient_id):
+        raise HTTPException(status_code=403, detail="无权访问该患者信息")
         
     latest_record = db.query(MedicalRecord)\
         .filter(MedicalRecord.patient_id == patient_id)\
@@ -84,10 +112,13 @@ async def get_patient_latest_record(
 
 @router.get("/{patient_id}/history")
 async def get_patient_history(
-    patient_id: int, 
-    db: Session = Depends(get_db)
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_active_user)
 ):
     """
     Get a list of medical records for a patient
     """
+    if not auth_service.check_patient_permission(db, current_user, patient_id):
+        raise HTTPException(status_code=403, detail="无权访问该患者记录")
     return record_service.get_patient_history(db, patient_id)

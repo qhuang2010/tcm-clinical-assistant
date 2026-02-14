@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { authFetch } from './utils/api';
+import { medicinesToText, textToMedicines } from './components/MedicineInput';
 import Sidebar from './components/Sidebar';
 import PatientInfo from './components/PatientInfo';
 import MedicalRecord from './components/MedicalRecord';
@@ -36,17 +37,20 @@ function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
+  const prescriptionRef = useRef(null);
 
   // --- Data State ---
   const [patientInfo, setPatientInfo] = useState({ name: '', gender: '男', age: '', phone: '' });
-  const [medicalRecord, setMedicalRecord] = useState({ complaint: '', prescription: '', note: '' });
+  const [medicalRecord, setMedicalRecord] = useState({ complaint: '', medicines: [], note: '' });
   const [pulseGrid, setPulseGrid] = useState({});
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [currentRecordId, setCurrentRecordId] = useState(null);
+  const [recordPermission, setRecordPermission] = useState({ can_edit: true, can_delete: true, is_owner: true });
 
-  // --- Mode State ---
-  const [practiceMode, setPracticeMode] = useState('personal');
-  const [shadowingTab, setShadowingTab] = useState('record');
-  const [teacher, setTeacher] = useState('');
+  // --- Mode State (persisted) ---
+  const [practiceMode, setPracticeMode] = useState(() => localStorage.getItem('practiceMode') || 'personal');
+  const [shadowingTab, setShadowingTab] = useState(() => localStorage.getItem('shadowingTab') || 'record');
+  const [teacher, setTeacher] = useState(() => localStorage.getItem('teacher') || '');
   const [teachers, setTeachers] = useState([]);
 
   // --- Effects ---
@@ -55,6 +59,10 @@ function App() {
       fetchPractitioners();
     }
   }, [token]);
+
+  useEffect(() => { localStorage.setItem('practiceMode', practiceMode); }, [practiceMode]);
+  useEffect(() => { localStorage.setItem('shadowingTab', shadowingTab); }, [shadowingTab]);
+  useEffect(() => { localStorage.setItem('teacher', teacher); }, [teacher]);
 
   const fetchPractitioners = async () => {
     try {
@@ -88,9 +96,11 @@ function App() {
 
   const handleNewPatient = () => {
     setPatientInfo({ name: '', gender: '男', age: '', phone: '' });
-    setMedicalRecord({ complaint: '', prescription: '', note: '' });
+    setMedicalRecord({ complaint: '', medicines: [], note: '' });
     setPulseGrid({});
     setAnalysisResult(null);
+    setCurrentRecordId(null);
+    setRecordPermission({ can_edit: true, can_delete: true, is_owner: true });
   };
 
   const handleLoadPatient = async (patientId) => {
@@ -105,7 +115,7 @@ function App() {
           age: data.age || '',
           phone: data.phone || ''
         });
-        setMedicalRecord({ complaint: '', prescription: '', note: '' });
+        setMedicalRecord({ complaint: '', medicines: [], note: '' });
         setPulseGrid({});
         setAnalysisResult(null);
       }
@@ -119,12 +129,40 @@ function App() {
       const res = await authFetch(`/api/records/${recordId}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.medical_record) setMedicalRecord(data.medical_record);
+        // Set patient info from record response
+        if (data.patient_info) {
+          setPatientInfo({
+            id: data.patient_info.id,
+            name: data.patient_info.name || '',
+            gender: data.patient_info.gender || '男',
+            age: data.patient_info.age || '',
+            phone: data.patient_info.phone || ''
+          });
+        }
+        if (data.medical_record) {
+          const mr = { ...data.medical_record };
+          // Backward compat: convert old string prescription to medicines array
+          if ((!mr.medicines || mr.medicines.length === 0) && mr.prescription && typeof mr.prescription === 'string') {
+            mr.medicines = textToMedicines(mr.prescription);
+          }
+          if (!mr.medicines) mr.medicines = [];
+          // Preserve record id for delete operations
+          mr.id = recordId;
+          setMedicalRecord(mr);
+        }
         if (data.pulse_grid) setPulseGrid(data.pulse_grid);
-        if (data.raw_input && data.raw_input.ai_analysis) {
-          setAnalysisResult(data.raw_input.ai_analysis);
+        // Load saved AI analysis
+        if (data.ai_analysis) {
+          setAnalysisResult(data.ai_analysis);
         } else {
           setAnalysisResult(null);
+        }
+        setCurrentRecordId(recordId);
+        // Set permission state
+        if (data.permissions) {
+          setRecordPermission(data.permissions);
+        } else {
+          setRecordPermission({ can_edit: true, can_delete: true, is_owner: true });
         }
       }
     } catch (e) {
@@ -133,16 +171,48 @@ function App() {
   };
 
   const handleSave = async () => {
-    if (!patientInfo.name) {
+    // Merge prescription recognition data — prescription component is source of truth
+    let mergedPatientInfo = { ...patientInfo };
+    let mergedMedicalRecord = { ...medicalRecord };
+
+    if (prescriptionRef.current?.hasData?.()) {
+      const info = prescriptionRef.current.getPatientInfo();
+      if (info) {
+        // Prescription component's corrected data overrides main form
+        if (info.name) mergedPatientInfo.name = info.name;
+        if (info.gender) mergedPatientInfo.gender = info.gender;
+        if (info.age) mergedPatientInfo.age = info.age;
+        if (info.diagnosis) mergedMedicalRecord.complaint = info.diagnosis;
+        if (info.experience) mergedMedicalRecord.note = info.experience;
+      }
+      const medicines = prescriptionRef.current.getMedicines();
+      if (medicines && medicines.length > 0) {
+        // Merge: keep existing medicines, append new ones from prescription
+        const existing = mergedMedicalRecord.medicines || [];
+        const existingNames = new Set(existing.map(m => m.name));
+        const newMeds = medicines.filter(m => !existingNames.has(m.name));
+        mergedMedicalRecord.medicines = [...existing, ...newMeds];
+      }
+    }
+
+    if (!mergedPatientInfo.name) {
       alert("请输入患者姓名");
       return;
     }
 
+    // Convert medicines array to text for backward compatibility
+    mergedMedicalRecord.prescription = medicinesToText(mergedMedicalRecord.medicines || []);
+
+    // Update state so UI reflects merged data
+    setPatientInfo(mergedPatientInfo);
+    setMedicalRecord(mergedMedicalRecord);
+
     try {
       const payload = {
-        patient_info: patientInfo,
-        medical_record: medicalRecord,
+        patient_info: mergedPatientInfo,
+        medical_record: mergedMedicalRecord,
         pulse_grid: pulseGrid,
+        ai_analysis: analysisResult,
         mode: practiceMode,
         teacher: teacher
       };
@@ -157,7 +227,19 @@ function App() {
 
       if (res.ok) {
         alert("保存成功");
+        // Auto-save annotation data if on prescription tab
+        if (prescriptionRef.current) {
+          prescriptionRef.current.saveAnnotation();
+        }
         setLastUpdateTime(Date.now());
+        // Clear form for next entry
+        setPatientInfo({ name: '', gender: '男', age: '', phone: '' });
+        setMedicalRecord({ complaint: '', medicines: [], note: '' });
+        setPulseGrid({});
+        setAnalysisResult(null);
+        setCurrentRecordId(null);
+        setRecordPermission({ can_edit: true, can_delete: true, is_owner: true });
+        if (practiceMode === 'shadowing') setShadowingTab('prescription');
       } else {
         alert("保存失败");
       }
@@ -181,7 +263,7 @@ function App() {
         setLastUpdateTime(Date.now());
         handleNewPatient();
       }
-    } catch (e) {
+    } catch {
       alert("删除失败");
     } finally {
       setShowDeleteModal(false);
@@ -191,9 +273,14 @@ function App() {
 
   const handleAnalyze = async () => {
     try {
+      // Include prescription text for AI analysis
+      const mrForAnalysis = {
+        ...medicalRecord,
+        prescription: medicinesToText(medicalRecord.medicines || []),
+      };
       const payload = {
         pulse_grid: pulseGrid,
-        medical_record: medicalRecord,
+        medical_record: mrForAnalysis,
         patient_info: patientInfo
       };
       const res = await authFetch('/api/analyze/llm/report', {
@@ -206,6 +293,14 @@ function App() {
       if (res.ok) {
         const result = await res.json();
         setAnalysisResult(result);
+        // Auto-save analysis to record if record exists
+        if (currentRecordId) {
+          authFetch(`/api/records/${currentRecordId}/analysis`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ai_analysis: result })
+          }).catch(e => console.error("Save analysis failed", e));
+        }
       }
     } catch (e) {
       console.error("Analysis failed", e);
@@ -214,8 +309,8 @@ function App() {
 
   // --- Render ---
 
-  const handleFillPrescription = (text) => {
-    setMedicalRecord(prev => ({ ...prev, prescription: text }));
+  const handleFillPrescription = (medicines) => {
+    setMedicalRecord(prev => ({ ...prev, medicines }));
     setShadowingTab('record');
   };
 
@@ -347,10 +442,20 @@ function App() {
         <div className="content-area">
           <div className="left-panel">
             {practiceMode === 'shadowing' && shadowingTab === 'prescription' ? (
-              <PrescriptionRecognition
-                onFillPrescription={handleFillPrescription}
-                onFillInfo={handleFillInfo}
-              />
+              <>
+                <PrescriptionRecognition
+                  key={lastUpdateTime}
+                  ref={prescriptionRef}
+                  onFillPrescription={handleFillPrescription}
+                  onFillInfo={handleFillInfo}
+                />
+                <div className="action-buttons">
+                  <button className="btn-primary" onClick={handleSave}>
+                    <span>💾</span>
+                    <span>保存病历</span>
+                  </button>
+                </div>
+              </>
             ) : (
               <>
                 <PatientInfo
@@ -358,18 +463,27 @@ function App() {
                   onChange={setPatientInfo}
                   onNewPatient={handleNewPatient}
                   onDelete={() => medicalRecord.id && handleDelete(medicalRecord.id)}
+                  canEdit={recordPermission.can_edit}
                 />
 
                 <MedicalRecord
                   data={medicalRecord}
                   onChange={setMedicalRecord}
+                  canEdit={recordPermission.can_edit}
                 />
 
                 <div className="action-buttons">
-                  <button className="btn-primary" onClick={handleSave}>
-                    <span>💾</span>
-                    <span>保存病历</span>
-                  </button>
+                  {recordPermission.can_edit && (
+                    <button className="btn-primary" onClick={handleSave}>
+                      <span>💾</span>
+                      <span>保存病历</span>
+                    </button>
+                  )}
+                  {!recordPermission.can_edit && recordPermission.owner_name && (
+                    <span style={{ color: '#999', fontSize: '14px' }}>
+                      只读模式（创建者：{recordPermission.owner_name}）
+                    </span>
+                  )}
                 </div>
 
                 <AIAnalysis data={analysisResult} onAnalyze={handleAnalyze} />

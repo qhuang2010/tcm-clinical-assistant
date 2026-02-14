@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MedicalRecord from './MedicalRecord';
+import { medicinesToText } from './MedicineInput';
 import PulseGrid from './PulseGrid';
 import AIAnalysis from './AIAnalysis';
 import HealthChat from './HealthChat';
@@ -14,7 +15,7 @@ const PersonalDashboard = ({ token, user, onLogout }) => {
 
     const [medicalRecord, setMedicalRecord] = useState({
         complaint: '',
-        prescription: '',
+        medicines: [],
         totalDosage: '6付',
         note: ''
     });
@@ -50,6 +51,10 @@ const PersonalDashboard = ({ token, user, onLogout }) => {
     };
 
     const handleSave = async () => {
+        const mrForSave = {
+            ...medicalRecord,
+            prescription: medicinesToText(medicalRecord.medicines || []),
+        };
         const payload = {
             patient_info: {
                 name: user.real_name || user.username,
@@ -57,7 +62,7 @@ const PersonalDashboard = ({ token, user, onLogout }) => {
                 age: 0,
                 phone: user.username
             },
-            medical_record: medicalRecord,
+            medical_record: mrForSave,
             pulse_grid: pulseGrid,
             mode: 'personal'
         };
@@ -84,8 +89,12 @@ const PersonalDashboard = ({ token, user, onLogout }) => {
     };
 
     const handleAnalyze = async () => {
+        const mrForAnalysis = {
+            ...medicalRecord,
+            prescription: medicinesToText(medicalRecord.medicines || []),
+        };
         const payload = {
-            medical_record: medicalRecord,
+            medical_record: mrForAnalysis,
             pulse_grid: pulseGrid,
             patient_info: {
                 name: user.real_name || user.username,

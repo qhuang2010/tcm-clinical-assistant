@@ -1,7 +1,8 @@
 import React from 'react';
 
-const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
+const PatientInfo = ({ data, onChange, onNewPatient, onDelete, canEdit = true }) => {
   const handleChange = (e) => {
+    if (!canEdit) return;
     const { name, value } = e.target;
     onChange({ ...data, [name]: value });
   };
@@ -22,17 +23,19 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
           >
             + 新增患者
           </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="btn-small danger"
-          >
-            删除
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="btn-small danger"
+            >
+              删除
+            </button>
+          )}
         </div>
       </div>
       <div className="form-row" style={{ display: 'flex', gap: '15px' }}>
@@ -45,6 +48,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
             placeholder="请输入姓名"
             value={data.name}
             onChange={handleChange}
+            readOnly={!canEdit}
           />
         </div>
         <div className="form-group" style={{ flex: 0.8 }}>
@@ -56,6 +60,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
             placeholder="岁"
             value={data.age}
             onChange={handleChange}
+            readOnly={!canEdit}
           />
         </div>
         <div className="form-group" style={{ flex: 0.8 }}>
@@ -65,6 +70,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
             className="form-control"
             value={data.gender || '男'}
             onChange={handleChange}
+            disabled={!canEdit}
           >
             <option value="男">男</option>
             <option value="女">女</option>
@@ -79,6 +85,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
             placeholder="请输入电话号码"
             value={data.phone || ''}
             onChange={handleChange}
+            readOnly={!canEdit}
           />
         </div>
       </div>

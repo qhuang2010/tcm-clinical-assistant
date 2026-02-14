@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
@@ -6,6 +6,8 @@ from src.database.models import Patient, MedicalRecord
 from src.database.connection import SessionLocal, SessionCloud
 import logging
 import math
+import json
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +305,75 @@ def _grid_to_vector(grid: Dict[str, Any]) -> List[float]:
     return _normalize_vector(averaged)
 
 
+def _format_grid_for_prompt(grid: Dict[str, Any]) -> str:
+    """Format pulse grid data into readable text for LLM prompt."""
+    lines = []
+    for side, prefix in [("左手", "left-"), ("右手", "right-")]:
+        side_lines = []
+        for pos_name, pos_key in [("寸", "cun"), ("关", "guan"), ("尺", "chi")]:
+            for depth_name, depth_key in [("浮取", "fu"), ("中取", "zhong"), ("沉取", "chen")]:
+                key = f"{prefix}{pos_key}-{depth_key}"
+                text = grid.get(key, "")
+                if isinstance(text, str) and text.strip():
+                    side_lines.append(f"  {pos_name}{depth_name}: {text.strip()}")
+        if side_lines:
+            lines.append(f"{side}:")
+            lines.extend(side_lines)
+
+    overall = grid.get("overall_description", "")
+    if isinstance(overall, str) and overall.strip():
+        lines.append(f"整体描述: {overall.strip()}")
+
+    return "\n".join(lines) if lines else ""
+
+
+_LLM_PULSE_SYSTEM_PROMPT = "你是一位中医脉诊专家。请分析以下九宫格脉象记录，综合判断患者的八纲辨证属性。"
+
+_LLM_PULSE_USER_PROMPT_TEMPLATE = """脉象数据：
+{grid_text}
+
+请根据所有位点的脉象描述，输出一个JSON对象，包含四个维度的评分（-1到1之间的小数）：
+- xu_shi: 虚(-1)到实(+1)
+- yin_yang: 阴(-1)到阳(+1)
+- biao_li: 表(-1)到里(+1)
+- han_re: 寒(-1)到热(+1)
+
+只输出JSON，不要其他文字。"""
+
+
+def _llm_grid_to_vector(grid: Dict[str, Any], llm_service) -> Optional[List[float]]:
+    """Use LLM to extract a 4D 八纲辨证 vector from pulse grid data.
+    Returns None if LLM is unavailable or fails."""
+    grid_text = _format_grid_for_prompt(grid)
+    if not grid_text:
+        return None
+
+    try:
+        user_prompt = _LLM_PULSE_USER_PROMPT_TEMPLATE.format(grid_text=grid_text)
+        response = llm_service._call_llm(_LLM_PULSE_SYSTEM_PROMPT, user_prompt)
+
+        # Strip markdown code fences if present
+        text = response.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            text = text.rsplit("```", 1)[0]
+        text = text.strip()
+
+        parsed = json.loads(text)
+        vec = [
+            float(parsed["xu_shi"]),
+            float(parsed["yin_yang"]),
+            float(parsed["biao_li"]),
+            float(parsed["han_re"]),
+        ]
+        # Clamp to [-1, 1]
+        vec = [max(-1.0, min(1.0, v)) for v in vec]
+        return vec
+    except Exception as e:
+        logger.warning(f"LLM pulse vector extraction failed: {e}")
+        return None
+
+
 def _vector_similarity(vec_a: List[float], vec_b: List[float]) -> float:
     """Compute similarity between two 4D vectors. Returns 0.0 ~ 1.0."""
     dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(vec_a, vec_b)))
@@ -310,17 +381,28 @@ def _vector_similarity(vec_a: List[float], vec_b: List[float]) -> float:
     return 1.0 - (dist / max_dist)
 
 
-def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Dict[str, Any]]:
+def search_similar_records(db: Session, current_grid: Dict[str, Any], llm_service=None) -> List[Dict[str, Any]]:
     """
     Search for similar medical records based on 八纲辨证 vector similarity.
-    Converts pulse descriptions to 4D vectors [虚实, 阴阳, 表里, 寒热],
-    then recommends records with >= 90% similarity (difference <= 10%).
+    When llm_service is provided, uses LLM to extract semantic vectors from free-text
+    pulse descriptions. Falls back to keyword-based vectors when LLM is unavailable.
     Only searches records that have a practitioner (teacher records) for learning reference.
     """
     if not current_grid:
         return []
 
-    current_vec = _grid_to_vector(current_grid)
+    # Try LLM vector first, fall back to keyword-based
+    current_vec = None
+    used_llm = False
+    if llm_service:
+        current_vec = _llm_grid_to_vector(current_grid, llm_service)
+        if current_vec:
+            used_llm = True
+            logger.info(f"Using LLM vector for current input: {current_vec}")
+
+    if current_vec is None:
+        current_vec = _grid_to_vector(current_grid)
+
     # Skip if input has no meaningful pulse data
     if current_vec == [0.0, 0.0, 0.0, 0.0]:
         return []
@@ -330,14 +412,27 @@ def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Di
     ).order_by(MedicalRecord.created_at.desc()).limit(200).all()
 
     results = []
-    similarity_threshold = 0.90
+    # LLM vectors are more precise and spread out, so use a lower threshold
+    similarity_threshold = 0.80 if used_llm else 0.90
 
     for record in candidates:
         if not record.data or "pulse_grid" not in record.data:
             continue
 
-        candidate_grid = record.data["pulse_grid"]
-        candidate_vec = _grid_to_vector(candidate_grid)
+        # Prefer cached LLM vector if available
+        candidate_vec = None
+        if used_llm and record.data.get("pulse_vector"):
+            try:
+                candidate_vec = [float(v) for v in record.data["pulse_vector"]]
+                if len(candidate_vec) != 4:
+                    candidate_vec = None
+            except (TypeError, ValueError):
+                candidate_vec = None
+
+        if candidate_vec is None:
+            candidate_grid = record.data["pulse_grid"]
+            candidate_vec = _grid_to_vector(candidate_grid)
+
         if candidate_vec == [0.0, 0.0, 0.0, 0.0]:
             continue
 
@@ -351,9 +446,43 @@ def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Di
                 "score": round(similarity * 100, 1),
                 "similarity": round(similarity, 4),
                 "vector": [round(v, 3) for v in candidate_vec],
-                "pulse_grid": candidate_grid,
+                "pulse_grid": record.data["pulse_grid"],
                 "complaint": record.complaint,
             })
 
     results.sort(key=lambda x: x["similarity"], reverse=True)
     return results[:5]
+
+
+def precompute_pulse_vectors(db: Session, llm_service) -> int:
+    """Batch compute LLM pulse vectors for records that don't have one cached.
+    Returns the number of records updated."""
+    records = db.query(MedicalRecord).filter(
+        MedicalRecord.practitioner_id.isnot(None)
+    ).all()
+
+    updated = 0
+    for record in records:
+        if not record.data or "pulse_grid" not in record.data:
+            continue
+        # Skip if already has a cached vector
+        if record.data.get("pulse_vector"):
+            continue
+
+        vec = _llm_grid_to_vector(record.data["pulse_grid"], llm_service)
+        if vec is None:
+            continue
+
+        new_data = copy.deepcopy(record.data)
+        new_data["pulse_vector"] = [round(v, 4) for v in vec]
+        record.data = new_data
+        updated += 1
+
+        # Commit in batches of 10 to avoid long transactions
+        if updated % 10 == 0:
+            db.commit()
+            logger.info(f"Precomputed {updated} pulse vectors so far...")
+
+    db.commit()
+    logger.info(f"Precomputed pulse vectors for {updated} records total.")
+    return updated

@@ -94,13 +94,18 @@ def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) 
         "medical_record": medical_info,
         "pulse_grid": data.get("pulse_grid", {}),
         "raw_input": data,
-        "client_info": { 
+        "client_info": {
             "mode": mode,
             "teacher": teacher_name,
             "practitioner_id": practitioner_id,
             "user_id": user_id
         }
     }
+
+    # Preserve AI analysis if provided
+    ai_analysis = data.get("ai_analysis")
+    if ai_analysis:
+        record_data["ai_analysis"] = ai_analysis
     
     if existing_record:
         existing_record.complaint = complaint
@@ -152,17 +157,39 @@ def get_record_by_id(db: Session, record_id: int) -> Dict[str, Any]:
     record = db.query(MedicalRecord).filter(MedicalRecord.id == record_id).first()
     if not record:
         return None
-        
+
+    # Build patient_info from the related Patient
+    patient = record.patient
+    patient_info = {}
+    if patient:
+        patient_info = {
+            "id": patient.id,
+            "name": patient.name,
+            "age": patient.age,
+            "gender": patient.gender,
+            "phone": patient.phone
+        }
+
     response_data = {
+        "record_id": record.id,
+        "user_id": record.user_id,
+        "patient_id": record.patient_id,
+        "patient_info": patient_info,
         "medical_record": {},
-        "pulse_grid": {}
+        "pulse_grid": {},
+        "raw_input": None,
+        "ai_analysis": None
     }
-    
+
     if record.data:
         record_data = record.data
         if "medical_record" in record_data:
             response_data["medical_record"] = record_data["medical_record"]
         if "pulse_grid" in record_data:
             response_data["pulse_grid"] = record_data["pulse_grid"]
-            
+        if "raw_input" in record_data:
+            response_data["raw_input"] = record_data["raw_input"]
+        if "ai_analysis" in record_data:
+            response_data["ai_analysis"] = record_data["ai_analysis"]
+
     return response_data

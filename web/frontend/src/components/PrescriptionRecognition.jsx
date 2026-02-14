@@ -1,7 +1,7 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { authFetch } from '../utils/api';
 
-export default function PrescriptionRecognition({ onFillPrescription, onFillInfo }) {
+const PrescriptionRecognition = forwardRef(function PrescriptionRecognition({ onFillPrescription, onFillInfo }, ref) {
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
   const [patientInfo, setPatientInfo] = useState({});
@@ -51,6 +51,31 @@ export default function PrescriptionRecognition({ onFillPrescription, onFillInfo
     if (file) handleFileSelect(file);
   }, [handleFileSelect]);
 
+  // --- Rotate image 90° clockwise ---
+  const handleRotate = useCallback(() => {
+    if (!imageUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.height;
+      canvas.height = img.width;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const rotatedFile = new File([blob], 'rotated.jpg', { type: 'image/jpeg' });
+        setImageFile(rotatedFile);
+        if (imageUrl) URL.revokeObjectURL(imageUrl);
+        setImageUrl(URL.createObjectURL(blob));
+        setBoxes([]);
+        setMedData({});
+      }, 'image/jpeg', 0.92);
+    };
+    img.src = imageUrl;
+  }, [imageUrl]);
+
   // --- Recognize patient info via LLM ---
   const handleRecognize = async () => {
     if (!imageFile) return;
@@ -71,10 +96,6 @@ export default function PrescriptionRecognition({ onFillPrescription, onFillInfo
         setIsMock(!!data.mock);
         if (data.error) setApiError(`[${data.method}] ${data.error}`);
         else if (data.method) console.log('OCR method:', data.method);
-        // Auto-fill patient info to main form (stay on current tab)
-        if (info.name || info.gender || info.age || info.diagnosis) {
-          onFillInfo(info, { switchTab: false });
-        }
       } else {
         const text = await res.text();
         setApiError(`HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -162,14 +183,11 @@ export default function PrescriptionRecognition({ onFillPrescription, onFillInfo
   };
 
   const handleFillPrescription = () => {
-    const lines = boxes.map(b => {
+    const medicines = boxes.map(b => {
       const d = medData[b.id] || {};
-      const name = (d.name || '').trim();
-      const dosage = (d.dosage || '').trim();
-      if (!name) return '';
-      return dosage ? `${name} ${dosage}g` : name;
-    }).filter(Boolean);
-    onFillPrescription(lines.join('\n'));
+      return { id: b.id, name: (d.name || '').trim(), dosage: (d.dosage || '').trim() };
+    }).filter(m => m.name);
+    onFillPrescription(medicines);
   };
 
   const handleSaveAnnotation = async () => {
@@ -190,14 +208,27 @@ export default function PrescriptionRecognition({ onFillPrescription, onFillInfo
         method: 'POST',
         body: formData,
       });
-      if (res.ok) alert('标注数据已保存');
-      else alert('保存失败');
+      if (res.ok) return true;
     } catch (e) {
-      alert('保存出错: ' + e.message);
+      console.error('保存标注出错:', e.message);
     } finally {
       setSaving(false);
     }
+    return false;
   };
+
+  // Expose saveAnnotation and medicine data to parent via ref
+  useImperativeHandle(ref, () => ({
+    saveAnnotation: handleSaveAnnotation,
+    getMedicines: () => {
+      return boxes.map(b => {
+        const d = medData[b.id] || {};
+        return { id: b.id, name: (d.name || '').trim(), dosage: (d.dosage || '').trim() };
+      }).filter(m => m.name);
+    },
+    getPatientInfo: () => ({ ...patientInfo, experience }),
+    hasData: () => boxes.length > 0 || !!patientInfo.name,
+  }));
 
   const handleClear = () => {
     setImageFile(null);
@@ -289,6 +320,7 @@ export default function PrescriptionRecognition({ onFillPrescription, onFillInfo
 
           {/* Action bar */}
           <div className="prescription-actions">
+            <button className="btn-rotate" onClick={handleRotate} title="顺时针旋转90°">↻</button>
             <button className="btn-recognize" onClick={handleRecognize} disabled={loading}>
               {loading ? '识别中...' : '识别患者信息'}
             </button>
@@ -418,4 +450,6 @@ export default function PrescriptionRecognition({ onFillPrescription, onFillInfo
       )}
     </div>
   );
-}
+});
+
+export default PrescriptionRecognition;

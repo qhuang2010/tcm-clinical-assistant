@@ -14,7 +14,7 @@ from src.database.connection import engine, Base
 # Import models to register tables with SQLAlchemy
 import src.database.models
 
-from web.routers import auth, admin, patients, records, practitioners, analysis, sync, system, files, prescription
+from web.routers import auth, admin, patients, records, practitioners, analysis, sync, system, files, prescription, permissions
 
 # Create tables if they don't exist
 # Note: In production, use Alembic for migrations
@@ -44,6 +44,7 @@ app.include_router(analysis.router)
 app.include_router(sync.router)
 app.include_router(files.router)
 app.include_router(prescription.router)
+app.include_router(permissions.router)
 app.include_router(system.router)
 
 # Mount static files from React build
