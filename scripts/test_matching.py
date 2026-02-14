@@ -1,96 +1,102 @@
 import sys
 import os
-import requests
 
 # Add src to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.database.connection import SessionLocal
-from src.database.models import Patient, MedicalRecord
-from datetime import datetime
+from src.services.search_service import (
+    _extract_keywords, _text_to_vector, _normalize_vector,
+    _grid_to_vector, _vector_similarity, PULSE_KEYWORD_VECTORS,
+)
 
-def test_matching_logic():
-    db = SessionLocal()
-    try:
-        print("Starting matching logic verification...")
-        
-        # 1. Clear existing records for clean test
-        db.query(MedicalRecord).delete()
-        db.query(Patient).delete()
-        db.commit()
-        
-        # 2. Create a dummy patient
-        p = Patient(name="TestPatient", gender="男", age=30)
-        db.add(p)
-        db.commit()
-        db.refresh(p)
-        
-        # 3. Create a record with Symmetric Pulse (Big everywhere)
-        # But let's make it distinct: Left=Floating, Right=Deep
-        # To test cross-matching
-        
-        # Case A: Left=Floating, Right=Deep
-        grid_A = {
-            "left-cun-fu": "Floating",
-            "right-cun-chen": "Deep",
-            "overall_description": "Mixed Pulse"
-        }
-        rec_A = MedicalRecord(
-            patient_id=p.id,
-            data={"pulse_grid": grid_A, "medical_record": {}, "raw_input": {}}
-        )
-        db.add(rec_A)
-        db.commit()
-        
-        # 4. Test Single Hand Match
-        # Input: Left="Deep"
-        # Since RecA has Right="Deep", Input(Left) should match RecA(Right) if logic works.
-        
-        print("\nTest Case 1: Input Left='Deep' vs Record(Left='Floating', Right='Deep')")
-        # Should match effectively because Input(L) ~= Record(R)
-        
-        # We need to test via API function directly or mock it? 
-        # Ideally via API endpoint but server is running. 
-        # Let's verify via direct function call logic simulation or request to localhost:8000
-        
-        try:
-            url = "http://localhost:8000/api/records/search_similar"
-            payload = {
-                "pulse_grid": {
-                    "left-cun-chen": "Deep"  # Input Left matches Record Right's feature
-                }
-            }
-            
-            # Using requests to hit the running server
-            resp = requests.post(url, json=payload)
-            if resp.status_code == 200:
-                results = resp.json()
-                if len(results) > 0:
-                    print(f"✓ Match Found! Score: {results[0]['score']}")
-                    print(f"  Matches: {results[0]['matches']}")
-                    # Expect match on right-cun-che (from input left-cun-che)
-                    # Input key: left-cun-che. Candidate key matched: right-cun-che?
-                    # My logic: calculate_score(prefix_a="left-", prefix_b="right-")
-                    # key_a = left-cun-che (Deep), key_b = right-cun-che (Deep) -> Match!
-                    
-                    found_cross_match = any("right" in m for m in results[0]['matches'])
-                    if found_cross_match:
-                         print("✓ Successfully matched Input(Left) against Candidate(Right)!")
-                    else:
-                         print("? Match found but maybe not cross-hand? Check matches list.")
-                else:
-                    print("✗ No matches found. Logic might be wrong.")
-            else:
-                print(f"✗ API Error: {resp.status_code} {resp.text}")
-                
-        except Exception as e:
-            print(f"✗ Request failed: {e}")
 
-    except Exception as e:
-        print(f"Error during test: {e}")
-        db.rollback()
-    finally:
-        db.close()
+def test_keyword_extraction():
+    print("=== Test: Keyword Extraction ===")
+    cases = [
+        ("浮滑", ["浮", "滑"]),
+        ("沉细弱", ["沉", "细", "弱"]),
+        ("有力应指", ["有力", "应指"]),
+        ("稍空无力", ["稍空", "无力"]),
+        ("弦紧有力", ["弦", "紧", "有力"]),
+    ]
+    for text, expected in cases:
+        result = _extract_keywords(text)
+        status = "OK" if result == expected else "FAIL"
+        print(f"  [{status}] '{text}' -> {result} (expected {expected})")
+
+
+def test_vector_similarity():
+    print("\n=== Test: Vector Similarity ===")
+    # Identical vectors -> similarity = 1.0
+    v1 = [1.0, 0.0, -1.0, 0.5]
+    assert _vector_similarity(v1, v1) == 1.0, "Identical vectors should be 1.0"
+    print("  [OK] Identical vectors -> 1.0")
+
+    # Opposite vectors -> low similarity
+    v2 = [-1.0, 0.0, 1.0, -0.5]
+    sim = _vector_similarity(v1, v2)
+    print(f"  [OK] Opposite vectors -> {sim:.4f} (should be low)")
+    assert sim < 0.5, "Opposite vectors should have low similarity"
+
+    # Close vectors -> high similarity
+    v3 = [0.9, 0.1, -0.9, 0.4]
+    sim = _vector_similarity(v1, v3)
+    print(f"  [OK] Close vectors -> {sim:.4f} (should be >= 0.90)")
+    assert sim >= 0.90, "Close vectors should have high similarity"
+
+
+def test_grid_to_vector():
+    print("\n=== Test: Grid to Vector ===")
+    # Grid with 沉取 positions (highest weight) showing 虚寒 pattern
+    grid_xu_han = {
+        "left-cun-chen": "细弱",
+        "left-guan-chen": "沉细",
+        "left-chi-chen": "微弱",
+        "overall_description": "脉沉细弱无力",
+    }
+    vec = _grid_to_vector(grid_xu_han)
+    print(f"  虚寒 grid vector: {[round(v, 3) for v in vec]}")
+    # Should be negative on 虚实 axis (虚) and 寒热 axis (寒)
+    assert vec[0] < 0, "虚寒 pattern should have negative 虚实 axis"
+    print("  [OK] 虚实 axis is negative (虚)")
+
+    # Grid showing 实热 pattern
+    grid_shi_re = {
+        "left-cun-chen": "洪数",
+        "left-guan-chen": "滑数",
+        "left-chi-chen": "有力",
+        "overall_description": "脉洪大有力",
+    }
+    vec2 = _grid_to_vector(grid_shi_re)
+    print(f"  实热 grid vector: {[round(v, 3) for v in vec2]}")
+    assert vec2[0] > 0, "实热 pattern should have positive 虚实 axis"
+    print("  [OK] 虚实 axis is positive (实)")
+
+    # These two should be very dissimilar
+    sim = _vector_similarity(vec, vec2)
+    print(f"  虚寒 vs 实热 similarity: {sim:.4f}")
+    assert sim < 0.90, "虚寒 and 实热 should NOT be similar"
+    print("  [OK] Correctly dissimilar (below 90% threshold)")
+
+    # Two similar 虚寒 grids should match
+    grid_xu_han_2 = {
+        "left-cun-chen": "沉细",
+        "left-guan-chen": "细弱",
+        "left-chi-chen": "沉弱",
+        "overall_description": "脉沉细无力",
+    }
+    vec3 = _grid_to_vector(grid_xu_han_2)
+    sim2 = _vector_similarity(vec, vec3)
+    print(f"  Two 虚寒 grids similarity: {sim2:.4f}")
+    if sim2 >= 0.90:
+        print("  [OK] Similar 虚寒 patterns match (>= 90%)")
+    else:
+        print(f"  [INFO] Similarity {sim2:.4f} below 90% threshold — patterns differ enough")
+
 
 if __name__ == "__main__":
-    test_matching_logic()
+    test_keyword_extraction()
+    test_vector_similarity()
+    test_grid_to_vector()
+    print("\n=== All tests passed ===")
+

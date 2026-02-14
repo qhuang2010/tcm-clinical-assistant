@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DateRangePicker from './DateRangePicker';
+import { authFetch } from '../utils/api';
 
 const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => {
   const [query, setQuery] = useState('');
@@ -12,6 +13,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
   // Date range filter state
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
+    today.setMonth(today.getMonth() - 3); // Default to last 3 months
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
@@ -30,9 +32,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
     if (!startDate || !endDate || !token) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/patients/by_date?start_date=${startDate}&end_date=${endDate}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await authFetch(`/api/patients/by_date?start_date=${startDate}&end_date=${endDate}`);
       if (response.ok) {
         const data = await response.json();
         setHistoryUsers(data);
@@ -69,9 +69,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/patients/search?query=${encodeURIComponent(query)}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await authFetch(`/api/patients/search?query=${encodeURIComponent(query)}`);
       if (response.ok) {
         const data = await response.json();
         setHistoryUsers(data);
@@ -89,9 +87,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
 
     // Fetch visit history
     try {
-      const response = await fetch(`/api/patients/${patientId}/history`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await authFetch(`/api/patients/${patientId}/history`);
       if (response.ok) {
         const data = await response.json();
         setPatientHistory(data);
@@ -105,7 +101,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
     <div className="sidebar">
       <h3 className="sidebar-title">历史患者</h3>
 
-      <div className="date-filter" style={{ marginBottom: '15px' }}>
+      <div className="date-filter">
         <DateRangePicker
           startDate={startDate}
           endDate={endDate}
@@ -142,7 +138,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
               >
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span className="user-name">{user.name}</span>
-                  <span className="user-phone" style={{ fontSize: '0.8em', opacity: 0.8 }}>{user.phone}</span>
+                  <span className="user-phone">{user.phone}</span>
                 </div>
                 <span className="user-date">{user.last_visit}</span>
               </li>
@@ -154,28 +150,13 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
                       key={record.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        console.log('Visit record clicked, id:', record.id);
                         setSelectedRecordId(record.id);
                         onRecordSelect(record.id);
                       }}
                       className={`visit-item ${selectedRecordId === record.id ? 'selected' : ''}`}
-                      style={{
-                        cursor: 'pointer',
-                        backgroundColor: selectedRecordId === record.id ? '#e3f2fd' : 'transparent',
-                        borderLeft: selectedRecordId === record.id ? '3px solid #007aff' : '3px solid transparent',
-                        paddingLeft: '10px',
-                        transition: 'all 0.2s'
-                      }}
                     >
-                      <div style={{ fontWeight: '500' }}>{record.visit_date}</div>
-                      <div style={{
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: '180px',
-                        fontSize: '0.8em',
-                        opacity: 0.8
-                      }}>
+                      <div className="visit-date">{record.visit_date}</div>
+                      <div className="visit-complaint">
                         {record.complaint || '无主诉'}
                       </div>
                     </li>
@@ -185,7 +166,7 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
             </React.Fragment>
           ))
         ) : (
-          <li style={{ color: '#999', textAlign: 'center', padding: '10px', fontSize: '0.9em' }}>
+          <li className="empty-state">
             {query ? '无匹配结果' : '该日期无就诊记录'}
           </li>
         )}

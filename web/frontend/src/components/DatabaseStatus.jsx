@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../utils/api';
 
 const DatabaseStatus = () => {
-    const [status, setStatus] = useState('checking'); // 'connected', 'pending', 'syncing', 'error'
+    const [status, setStatus] = useState('checking');
     const [pendingCount, setPendingCount] = useState(0);
     const [lastSyncTime, setLastSyncTime] = useState(null);
 
@@ -10,9 +11,7 @@ const DatabaseStatus = () => {
             const token = localStorage.getItem('token');
             if (!token) return;
 
-            const response = await fetch('/api/sync/status', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await authFetch('/api/sync/status');
 
             if (response.ok) {
                 const data = await response.json();
@@ -23,15 +22,10 @@ const DatabaseStatus = () => {
                     setStatus('connected');
                 }
             } else {
-                setStatus('error'); // Cloud API reachable but returned error
+                setStatus('error');
             }
         } catch (error) {
             console.error("Sync check failed", error);
-            // Don't set error globally effectively, because we are "Offline First"
-            // But maybe visual indication is needed?
-            setStatus('connected'); // Fallback: Assume Local is mostly fine, but maybe show a disconnected icon?
-            // Actually, if /api/sync/status fails, it means the LOCAL backend is down, effectively.
-            // Because /api/sync/status is a local endpoint.
             setStatus('error');
         }
     };
@@ -40,15 +34,13 @@ const DatabaseStatus = () => {
         setStatus('syncing');
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('/api/sync/trigger', {
+            const response = await authFetch('/api/sync/trigger', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (response.ok) {
                 const result = await response.json();
                 if (result.status === 'completed') {
-                    // Check again to confirm
                     await checkSyncStatus();
                     setLastSyncTime(new Date());
                     alert(`同步完成: 成功 ${result.data.synced} 条, 失败 ${result.data.failed} 条`);
@@ -68,22 +60,22 @@ const DatabaseStatus = () => {
 
     useEffect(() => {
         checkSyncStatus();
-        const interval = setInterval(checkSyncStatus, 10000); // Check every 10s
+        const interval = setInterval(checkSyncStatus, 10000);
         return () => clearInterval(interval);
     }, []);
 
     const getStatusConfig = () => {
         switch (status) {
             case 'connected':
-                return { color: '#34c759', text: '已同步云端', icon: '☁️' };
+                return { color: '#34c759', text: '已同步云端', icon: '☁️', btnStyle: 'secondary' };
             case 'pending':
-                return { color: '#ff9500', text: `${pendingCount} 条待同步`, icon: '⬆️' };
+                return { color: '#ff9500', text: `${pendingCount} 条待同步`, icon: '⬆️', btnStyle: 'primary' };
             case 'syncing':
-                return { color: '#0071e3', text: '正在同步...', icon: '🔄' };
+                return { color: '#0071e3', text: '正在同步...', icon: '🔄', btnStyle: 'disabled' };
             case 'error':
-                return { color: '#ff3b30', text: '服务未连接', icon: '❌' };
+                return { color: '#ff3b30', text: '服务未连接', icon: '❌', btnStyle: 'disabled' };
             default:
-                return { color: '#8e8e93', text: '检测中...', icon: '...' };
+                return { color: '#8e8e93', text: '检测中...', icon: '...', btnStyle: 'disabled' };
         }
     };
 
@@ -107,23 +99,24 @@ const DatabaseStatus = () => {
                 <span style={{ color: config.color, fontWeight: '600' }}>{config.text}</span>
             </div>
 
-            {/* Manual Sync Button - Always Visible or only when needed? Let's make it always visible if not syncing/error */}
             {status !== 'syncing' && status !== 'error' && (
                 <button
                     onClick={handleSync}
+                    disabled={status === 'syncing'}
                     style={{
                         padding: '4px 12px',
                         fontSize: '12px',
                         borderRadius: '12px',
-                        border: '1px solid #0071e3',
-                        backgroundColor: status === 'pending' ? '#0071e3' : 'white',
-                        color: status === 'pending' ? 'white' : '#0071e3',
-                        cursor: 'pointer',
+                        border: config.btnStyle === 'primary' ? 'none' : '1px solid #0071e3',
+                        backgroundColor: config.btnStyle === 'primary' ? '#0071e3' : 'white',
+                        color: config.btnStyle === 'primary' ? 'white' : '#0071e3',
+                        cursor: status === 'syncing' ? 'not-allowed' : 'pointer',
                         transition: 'all 0.2s',
-                        fontWeight: '500'
+                        fontWeight: '500',
+                        opacity: status === 'syncing' ? 0.6 : 1
                     }}
                 >
-                    {status === 'pending' ? '立即上传' : '手动同步'}
+                    {status === 'syncing' ? '同步中...' : (status === 'pending' ? '立即上传' : '手动同步')}
                 </button>
             )}
 

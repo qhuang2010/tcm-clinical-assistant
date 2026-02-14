@@ -38,7 +38,11 @@ class User(Base, SyncMixin):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
+    # Account type: 'practitioner' (default) or 'personal'
+    account_type = Column(String, default="practitioner", nullable=False)
+
     records = relationship("MedicalRecord", back_populates="user")
+    created_patients = relationship("Patient", back_populates="creator", foreign_keys="Patient.creator_id")
 
 class Patient(Base, SyncMixin):
     __tablename__ = "patients"
@@ -50,6 +54,9 @@ class Patient(Base, SyncMixin):
     gender = Column(String, nullable=True)
     age = Column(Integer, nullable=True)
     
+    # Ownership for personal mode (RLS)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    
     # JSONB Flesh for extensible patient details (e.g., lifestyle, family history)
     info = Column(JSON, nullable=True, server_default='{}')
     
@@ -57,6 +64,7 @@ class Patient(Base, SyncMixin):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     records = relationship("MedicalRecord", back_populates="patient")
+    creator = relationship("User", back_populates="created_patients", foreign_keys=[creator_id])
 
 class Practitioner(Base, SyncMixin):
     __tablename__ = "practitioners"

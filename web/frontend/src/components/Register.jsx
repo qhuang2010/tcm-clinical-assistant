@@ -8,7 +8,8 @@ const Register = ({ onBack, onRegisterSuccess }) => {
         real_name: '',
         email: '',
         phone: '',
-        organization: ''
+        organization: '',
+        account_type: 'practitioner'
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -46,7 +47,8 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                     real_name: formData.real_name,
                     email: formData.email,
                     phone: formData.phone,
-                    organization: formData.organization
+                    organization: formData.organization,
+                    account_type: formData.account_type
                 })
             });
 
@@ -152,13 +154,41 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                     </div>
 
                     <div style={inputGroupStyle}>
-                        <label style={labelStyle}>所属机构/医院</label>
+                        <label style={labelStyle}>账号类型 *</label>
+                        <div style={{ display: 'flex', gap: '20px', marginTop: '4px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+                                <input
+                                    type="radio"
+                                    name="account_type"
+                                    value="practitioner"
+                                    checked={formData.account_type === 'practitioner'}
+                                    onChange={handleChange}
+                                    style={{ marginRight: '8px' }}
+                                />
+                                医师用户
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+                                <input
+                                    type="radio"
+                                    name="account_type"
+                                    value="personal"
+                                    checked={formData.account_type === 'personal'}
+                                    onChange={handleChange}
+                                    style={{ marginRight: '8px' }}
+                                />
+                                个人/家庭用户
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style={inputGroupStyle}>
+                        <label style={labelStyle}>所属机构/医院 (选填)</label>
                         <input
                             type="text"
                             name="organization"
                             value={formData.organization}
                             onChange={handleChange}
-                            placeholder="您所在的医疗机构名称"
+                            placeholder="所在的医疗机构"
                             style={inputStyle}
                         />
                     </div>

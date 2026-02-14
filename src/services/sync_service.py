@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 from datetime import datetime
 from src.database.connection import SessionLocal, SessionCloud
 from src.database.models import User, Patient, Practitioner, MedicalRecord
@@ -116,8 +116,17 @@ class SyncService:
             # Iterate: User -> Practitioner -> Patient -> MedicalRecord
             for model in self.MODELS_ORDER:
                 # Get all records from Cloud (ignoring deleted for now)
-                # Optimization needed for production!
-                cloud_records = cloud_db.query(model).filter(model.is_deleted == False).all()
+                # Incremental Sync Optimization
+                query = cloud_db.query(model).filter(model.is_deleted == False)
+                
+                # Check if model supports incremental sync (has updated_at)
+                if hasattr(model, 'updated_at'):
+                    last_update = local_db.query(func.max(model.updated_at)).scalar()
+                    if last_update:
+                        logger.info(f"Incremental sync for {model.__tablename__} since {last_update}")
+                        query = query.filter(model.updated_at > last_update)
+                
+                cloud_records = query.all()
                 
                 for cloud_record in cloud_records:
                     try:

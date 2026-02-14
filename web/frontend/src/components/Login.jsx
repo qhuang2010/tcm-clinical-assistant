@@ -156,10 +156,9 @@ const Login = ({ onLogin, onRegister, message }) => {
 const cardStyle = {
     width: '380px',
     padding: '40px',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(20px)',
+    backgroundColor: '#ffffff',
     borderRadius: '24px',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.1), 0 8px 25px rgba(0,0,0,0.05)',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.15), 0 8px 25px rgba(0,0,0,0.1)',
 };
 
 const logoContainerStyle = {
@@ -209,19 +208,20 @@ const inputGroupStyle = {
 
 const labelStyle = {
     fontSize: '13px',
-    fontWeight: '500',
-    color: '#666',
+    fontWeight: '600',
+    color: '#1d1d1f',
     marginLeft: '4px',
 };
 
 const inputStyle = {
     padding: '14px 16px',
     borderRadius: '12px',
-    border: '1.5px solid #e0e0e0',
+    border: '2px solid #d2d2d7',
     fontSize: '15px',
     outline: 'none',
     transition: 'all 0.2s ease',
-    backgroundColor: '#fafafa',
+    backgroundColor: '#f0f0f5',
+    color: '#1d1d1f',
 };
 
 const buttonStyle = {

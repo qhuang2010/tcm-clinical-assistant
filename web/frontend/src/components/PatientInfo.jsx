@@ -8,7 +8,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
 
   return (
     <div className="patient-info-section">
-      <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="section-title">
         <span>患者基本信息</span>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
@@ -18,16 +18,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
               e.stopPropagation();
               onNewPatient();
             }}
-            style={{
-              backgroundColor: '#34c759', // Green for "New"
-              color: 'white',
-              border: 'none',
-              borderRadius: '15px',
-              padding: '4px 12px',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              fontWeight: '500'
-            }}
+            className="btn-small success"
           >
             + 新增患者
           </button>
@@ -38,16 +29,7 @@ const PatientInfo = ({ data, onChange, onNewPatient, onDelete }) => {
               e.stopPropagation();
               onDelete();
             }}
-            style={{
-              backgroundColor: '#ff3b30', // Red for "Delete"
-              color: 'white',
-              border: 'none',
-              borderRadius: '15px',
-              padding: '4px 12px',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              fontWeight: '500'
-            }}
+            className="btn-small danger"
           >
             删除
           </button>

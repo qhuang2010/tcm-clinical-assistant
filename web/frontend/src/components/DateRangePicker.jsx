@@ -6,7 +6,6 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
     const [tempEndDate, setTempEndDate] = useState(endDate);
     const containerRef = useRef(null);
 
-    // Handle click outside to close - only when dropdown is open
     useEffect(() => {
         if (!isOpen) return;
 
@@ -15,7 +14,6 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
                 setIsOpen(false);
             }
         };
-        // Use setTimeout to avoid immediate trigger
         const timer = setTimeout(() => {
             document.addEventListener('mousedown', handleClickOutside);
         }, 0);
@@ -26,7 +24,6 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
         };
     }, [isOpen]);
 
-    // Sync temp dates when props change
     useEffect(() => {
         setTempStartDate(startDate);
         setTempEndDate(endDate);
@@ -38,7 +35,6 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
     };
 
     const handleConfirm = () => {
-        // Ensure start <= end
         let finalStart = tempStartDate;
         let finalEnd = tempEndDate;
         if (tempStartDate > tempEndDate) {
@@ -73,25 +69,25 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
 
     return (
         <div ref={containerRef} style={{ position: 'relative' }}>
-            {/* Display Button */}
             <div
                 onClick={() => setIsOpen(!isOpen)}
+                className="date-picker-trigger"
                 style={{
                     width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d2d2d7',
-                    backgroundColor: '#fff',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: `1.5px solid ${isOpen ? '#0071e3' : '#d2d2d7'}`,
+                    backgroundColor: '#fafafa',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     fontFamily: 'inherit',
                     color: '#1d1d1f',
-                    fontSize: '14px',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
-                    boxShadow: isOpen ? '0 0 0 3px rgba(0, 122, 255, 0.15)' : 'none',
-                    borderColor: isOpen ? '#007aff' : '#d2d2d7'
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    transition: 'all 0.2s ease',
+                    boxShadow: isOpen ? '0 0 0 4px rgba(0, 113, 227, 0.12)' : 'inset 0 1px 2px rgba(0,0,0,0.04)'
                 }}
             >
                 <span>{displayText}</span>
@@ -103,88 +99,77 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
                 </svg>
             </div>
 
-            {/* Dropdown Panel */}
             {isOpen && (
                 <div style={{
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
                     left: 0,
                     right: 0,
-                    backgroundColor: '#fff',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                    padding: '16px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    borderRadius: '16px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+                    padding: '20px',
                     zIndex: 1000,
-                    minWidth: '280px'
+                    minWidth: '280px',
+                    border: '1px solid rgba(0,0,0,0.06)',
+                    animation: 'fadeIn 200ms ease, slideInUp 200ms cubic-bezier(0.16, 1, 0.3, 1)'
                 }}>
-                    {/* Quick Select Buttons */}
                     <div style={{
                         display: 'flex',
                         gap: '8px',
-                        marginBottom: '16px',
+                        marginBottom: '20px',
                         flexWrap: 'wrap'
                     }}>
-                        <button
-                            onClick={() => handleQuickSelect(0)}
-                            style={quickBtnStyle}
-                        >
+                        <button onClick={() => handleQuickSelect(0)} style={quickBtnStyle}>
                             今天
                         </button>
-                        <button
-                            onClick={() => handleQuickSelect(7)}
-                            style={quickBtnStyle}
-                        >
+                        <button onClick={() => handleQuickSelect(7)} style={quickBtnStyle}>
                             近7天
                         </button>
-                        <button
-                            onClick={() => handleQuickSelect(30)}
-                            style={quickBtnStyle}
-                        >
+                        <button onClick={() => handleQuickSelect(30)} style={quickBtnStyle}>
                             近30天
                         </button>
-                        <button
-                            onClick={() => handleQuickSelect(90)}
-                            style={quickBtnStyle}
-                        >
+                        <button onClick={() => handleQuickSelect(90)} style={quickBtnStyle}>
                             近3个月
                         </button>
                     </div>
 
-                    {/* Date Inputs */}
                     <div style={{ marginBottom: '16px' }}>
                         <label style={labelStyle}>开始日期</label>
                         <input
                             type="date"
                             value={tempStartDate}
                             onChange={(e) => setTempStartDate(e.target.value)}
-                            style={inputStyle}
+                            style={{
+                                ...inputStyle,
+                                appearance: 'none',
+                                WebkitAppearance: 'none',
+                                backgroundColor: '#ffffff',
+                                colorScheme: 'light'
+                            }}
                         />
                     </div>
-                    <div style={{ marginBottom: '16px' }}>
+                    <div style={{ marginBottom: '20px' }}>
                         <label style={labelStyle}>结束日期</label>
                         <input
                             type="date"
                             value={tempEndDate}
                             onChange={(e) => setTempEndDate(e.target.value)}
-                            style={inputStyle}
+                            style={{
+                                ...inputStyle,
+                                appearance: 'none',
+                                WebkitAppearance: 'none',
+                                backgroundColor: '#ffffff',
+                                colorScheme: 'light'
+                            }}
                         />
                     </div>
 
-                    {/* Confirm Button */}
                     <button
                         onClick={handleConfirm}
-                        style={{
-                            width: '100%',
-                            padding: '10px',
-                            borderRadius: '8px',
-                            border: 'none',
-                            backgroundColor: '#007aff',
-                            color: '#fff',
-                            fontSize: '14px',
-                            fontWeight: '500',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s'
-                        }}
+                        className="btn-primary"
+                        style={{ width: '100%', padding: '10px' }}
                     >
                         确认选择
                     </button>
@@ -195,32 +180,39 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
 };
 
 const quickBtnStyle = {
-    padding: '6px 12px',
-    borderRadius: '6px',
-    border: '1px solid #e0e0e0',
-    backgroundColor: '#f5f5f7',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    border: '1.5px solid #e0e0e0',
+    backgroundColor: '#ffffff',
     color: '#1d1d1f',
-    fontSize: '12px',
+    fontSize: '13px',
     cursor: 'pointer',
-    transition: 'background-color 0.2s'
+    transition: 'all 0.2s ease',
+    fontWeight: 500,
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
 };
 
 const labelStyle = {
     display: 'block',
-    fontSize: '12px',
-    color: '#666',
-    marginBottom: '6px'
+    fontSize: '13px',
+    color: '#86868b',
+    marginBottom: '8px',
+    fontWeight: 600
 };
 
 const inputStyle = {
     width: '100%',
-    padding: '10px',
-    borderRadius: '8px',
-    border: '1px solid #d2d2d7',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    border: '1.5px solid #d2d2d7',
     fontFamily: 'inherit',
     color: '#1d1d1f',
-    fontSize: '14px',
-    boxSizing: 'border-box'
+    fontSize: '15px',
+    boxSizing: 'border-box',
+    outline: 'none',
+    transition: 'all 0.2s ease',
+    backgroundColor: '#fafafa',
+    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)'
 };
 
 export default DateRangePicker;

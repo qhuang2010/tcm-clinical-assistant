@@ -4,6 +4,15 @@ from sqlalchemy import func, or_
 from datetime import datetime, date
 from src.database.models import Patient, MedicalRecord, Practitioner
 from pypinyin import lazy_pinyin, Style
+import re
+
+def _parse_age(raw) -> int:
+    """Extract numeric age from strings like '49岁', '49', 49."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    m = re.search(r'\d+', s)
+    return int(m.group()) if m else None
 
 def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) -> Dict[str, Any]:
     """
@@ -23,33 +32,40 @@ def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) 
     if patient_info.get("phone"):
         patient_query = patient_query.filter(Patient.phone == patient_info.get("phone"))
     else:
-        patient_query = patient_query.filter(
-            Patient.gender == patient_info.get("gender"),
-            Patient.age == int(patient_info.get("age", 0)) if patient_info.get("age") else None
-        )
+        # Build filter dynamically to avoid filter(None) undefined behavior
+        if patient_info.get("gender"):
+            patient_query = patient_query.filter(Patient.gender == patient_info.get("gender"))
+        parsed_age = _parse_age(patient_info.get("age"))
+        if parsed_age is not None:
+            patient_query = patient_query.filter(Patient.age == parsed_age)
         
     patient = patient_query.first()
     
     if not patient:
         pinyin_initials = "".join(lazy_pinyin(patient_name, style=Style.FIRST_LETTER))
+        
+        # Determine creator linkage
+        creator_id = None
+        mode = data.get("mode", "personal")
+        if mode == "personal" and user_id:
+             creator_id = user_id
+
         patient = Patient(
             name=patient_name,
             gender=patient_info.get("gender"),
-            age=int(patient_info.get("age", 0)) if patient_info.get("age") else None,
+            age=_parse_age(patient_info.get("age")),
             phone=patient_info.get("phone"),
             pinyin=pinyin_initials,
-            info=patient_info
+            info=patient_info,
+            creator_id=creator_id
         )
         db.add(patient)
-        db.commit()
-        db.refresh(patient)
+        db.flush()  # Get ID without committing
     else:
         if patient_info.get("phone") and not patient.phone:
             patient.phone = patient_info.get("phone")
-            db.commit()
         if not patient.pinyin:
              patient.pinyin = "".join(lazy_pinyin(patient.name, style=Style.FIRST_LETTER))
-             db.commit()
     
     # 2. Create or Update Medical Record
     today = date.today()
@@ -59,6 +75,7 @@ def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) 
     ).first()
     
     complaint = medical_info.get("complaint")
+    diagnosis = medical_info.get("diagnosis", "")
     mode = data.get("mode", "personal")
     teacher_name = data.get("teacher", "")
     practitioner_id = None
@@ -87,6 +104,7 @@ def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) 
     
     if existing_record:
         existing_record.complaint = complaint
+        existing_record.diagnosis = diagnosis
         existing_record.data = record_data
         existing_record.practitioner_id = practitioner_id
         existing_record.user_id = user_id # Track who updated it
@@ -97,6 +115,7 @@ def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) 
         new_record = MedicalRecord(
             patient_id=patient.id,
             complaint=complaint,
+            diagnosis=diagnosis,
             data=record_data,
             practitioner_id=practitioner_id,
             user_id=user_id
@@ -107,7 +126,13 @@ def save_medical_record(db: Session, data: Dict[str, Any], user_id: int = None) 
         message = "Record saved successfully"
     
     db.commit()
-    return {"status": "success", "message": message, "record_id": record_id}
+    return {
+        "status": "success", 
+        "message": message, 
+        "record_id": record_id,
+        "patient_id": patient.id,
+        "practitioner_id": practitioner_id
+    }
 
 def get_patient_history(db: Session, patient_id: int) -> List[Dict[str, Any]]:
     records = db.query(MedicalRecord)\

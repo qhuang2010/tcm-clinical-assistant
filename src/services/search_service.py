@@ -1,10 +1,11 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from src.database.models import Patient, MedicalRecord
 from src.database.connection import SessionLocal, SessionCloud
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def _get_cloud_session():
             logger.warning(f"Could not create cloud session: {e}")
     return None
 
-def _query_patients_by_date(db: Session, start, end, user_id: int = None) -> List[Dict[str, Any]]:
+def _query_patients_by_date(db: Session, start, end, user_id: int = None, source: str = "local") -> List[Dict[str, Any]]:
     """Helper to query patients from a single database session."""
     query = db.query(MedicalRecord).join(Patient).filter(
         func.date(MedicalRecord.visit_date) >= start,
@@ -41,7 +42,7 @@ def _query_patients_by_date(db: Session, start, end, user_id: int = None) -> Lis
                 "age": p.age,
                 "phone": p.phone,
                 "last_visit": r.visit_date.strftime("%Y-%m-%d"),
-                "source": "local" if db == SessionLocal else "cloud"
+                "source": source
             })
     return results
 
@@ -78,7 +79,7 @@ def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date
     cloud_db = _get_cloud_session()
     if cloud_db:
         try:
-            cloud_results = _query_patients_by_date(cloud_db, start, end, user_id)
+            cloud_results = _query_patients_by_date(cloud_db, start, end, user_id, source="cloud")
         except Exception as e:
             logger.warning(f"Cloud query failed: {e}")
         finally:
@@ -101,29 +102,36 @@ def get_patients_by_date_range(db: Session, start_date_str: str = None, end_date
     # Sort by last_visit descending
     merged_results.sort(key=lambda x: x["last_visit"], reverse=True)
     
-    # Remove internal 'uuid' and 'source' before returning to API (optional, can keep for debug)
-    return [{k: v for k, v in p.items() if k not in ['uuid', 'source']} for p in merged_results]
+    # Remove internal 'uuid' but keep 'source' for UI
+    return [{k: v for k, v in p.items() if k not in ['uuid']} for p in merged_results]
 
 
-def _query_patients_by_name(db: Session, query_str: str, user_id: int = None) -> List[Dict[str, Any]]:
+def _query_patients_by_name(db: Session, query_str: str, user_id: int = None, account_type: str = "practitioner", source: str = "local") -> List[Dict[str, Any]]:
     """Helper to search patients from a single database session."""
+    # Escape wildcard characters to prevent denial of service via '%%%...'
+    safe_query = query_str.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    
     base_filter = or_(
-        Patient.name.ilike(f"%{query_str}%"),
-        Patient.phone.ilike(f"%{query_str}%"),
-        Patient.pinyin.ilike(f"%{query_str}%")
+        Patient.name.ilike(f"%{safe_query}%", escape="\\"),
+        Patient.phone.ilike(f"%{safe_query}%", escape="\\"),
+        Patient.pinyin.ilike(f"%{safe_query}%", escape="\\")
     )
     
+    query = db.query(Patient).filter(base_filter)
+    
     if user_id is not None:
-        patient_ids = db.query(MedicalRecord.patient_id).filter(
-            MedicalRecord.user_id == user_id
-        ).distinct().subquery()
+        if account_type == 'personal':
+            # Personal users only see patients they created (owned by them)
+            # This allows managing multiple family members
+            query = query.filter(Patient.creator_id == user_id)
+        else:
+            # Practitioners see patients they have interaction with
+            patient_ids = db.query(MedicalRecord.patient_id).filter(
+                MedicalRecord.user_id == user_id
+            ).distinct().subquery()
+            query = query.filter(Patient.id.in_(patient_ids))
         
-        patients = db.query(Patient).filter(
-            base_filter,
-            Patient.id.in_(patient_ids)
-        ).limit(20).all()
-    else:
-        patients = db.query(Patient).filter(base_filter).limit(20).all()
+    patients = query.limit(20).all()
     
     return [
         {
@@ -133,12 +141,13 @@ def _query_patients_by_name(db: Session, query_str: str, user_id: int = None) ->
             "gender": p.gender,
             "age": p.age,
             "phone": p.phone,
-            "last_visit": p.updated_at.strftime("%Y-%m-%d") if p.updated_at else None
+            "last_visit": p.updated_at.strftime("%Y-%m-%d") if p.updated_at else None,
+            "source": source
         }
         for p in patients
     ]
 
-def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[str, Any]]:
+def search_patients(db: Session, query: str, user_id: int = None, account_type: str = "practitioner") -> List[Dict[str, Any]]:
     """
     Hybrid search: Find patients from BOTH Local and Cloud databases by name/phone.
     Results are merged by UUID. Local records take priority.
@@ -147,14 +156,14 @@ def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[s
         return []
     
     # 1. Query Local DB
-    local_results = _query_patients_by_name(db, query, user_id)
+    local_results = _query_patients_by_name(db, query, user_id, account_type)
     
     # 2. Query Cloud DB
     cloud_results = []
     cloud_db = _get_cloud_session()
     if cloud_db:
         try:
-            cloud_results = _query_patients_by_name(cloud_db, query, user_id)
+            cloud_results = _query_patients_by_name(cloud_db, query, user_id, account_type, source="cloud")
         except Exception as e:
             logger.warning(f"Cloud search failed: {e}")
         finally:
@@ -177,97 +186,174 @@ def search_patients(db: Session, query: str, user_id: int = None) -> List[Dict[s
     # Return without internal 'uuid' field
     return [{k: v for k, v in p.items() if k != 'uuid'} for p in merged_results[:20]]
 
-def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Search for similar medical records based on pulse grid.
-    Only searches records that have a practitioner (teacher records) for learning reference.
-    """
-    from src.database.models import Practitioner
-    
-    if not current_grid:
-        return []
-    
-    # Only search records with a practitioner assigned (teacher's records)
-    candidates = db.query(MedicalRecord).filter(
-        MedicalRecord.practitioner_id.isnot(None)
-    ).order_by(MedicalRecord.created_at.desc()).limit(200).all()
-    results = []
-    
+# 八纲辨证 keyword → 4D vector mapping: [虚实, 阴阳, 表里, 寒热]
+# 虚实: 虚(-1) ↔ 实(+1), 阴阳: 阴(-1) ↔ 阳(+1)
+# 表里: 表(-1) ↔ 里(+1), 寒热: 寒(-1) ↔ 热(+1)
+PULSE_KEYWORD_VECTORS: Dict[str, List[float]] = {
+    "浮": [0, 0.6, -0.8, 0],
+    "沉": [0, -0.6, 0.8, 0],
+    "迟": [-0.3, -0.4, 0, -0.8],
+    "数": [0.3, 0.4, 0, 0.8],
+    "滑": [0.4, 0, 0, 0.5],
+    "涩": [-0.5, 0, 0, -0.3],
+    "弦": [0.3, 0, 0, 0],
+    "紧": [0.3, 0, -0.3, -0.7],
+    "缓": [-0.3, 0, 0, 0],
+    "洪": [0.6, 0.5, 0, 0.7],
+    "微": [-0.8, -0.6, 0, -0.5],
+    "细": [-0.5, -0.4, 0, -0.2],
+    "大": [0.4, 0.3, 0, 0],
+    "弱": [-0.6, -0.3, 0, -0.2],
+    "短": [-0.4, 0, 0, 0],
+    "长": [0.3, 0, 0, 0],
+    "空": [-0.8, -0.5, 0, -0.3],
+    "窄": [-0.3, -0.3, 0, -0.6],
+    "宽": [0.2, 0.2, 0, 0.3],
+    "应指": [0.4, 0.3, 0, 0],
+    "稍空": [-0.4, -0.3, 0, -0.2],
+    "不空": [0.2, 0.1, 0, 0],
+    "有力": [0.6, 0.3, 0, 0],
+    "无力": [-0.6, -0.3, 0, 0],
+    "顶": [0.5, 0.3, 0, 0.4],
+}
+
+# Position depth weights: 沉取 reflects true qi, weighted highest
+_DEPTH_WEIGHTS = {"chen": 1.5, "zhong": 1.0, "fu": 0.8}
+_OVERALL_WEIGHT = 1.2
+
+
+def _extract_keywords(text: str) -> List[str]:
+    """Extract matching pulse keywords from text, longest match first."""
+    found = []
+    # Sort keywords by length descending so multi-char keywords match first
+    sorted_kw = sorted(PULSE_KEYWORD_VECTORS.keys(), key=len, reverse=True)
+    remaining = text
+    while remaining:
+        matched = False
+        for kw in sorted_kw:
+            if remaining.startswith(kw):
+                found.append(kw)
+                remaining = remaining[len(kw):]
+                matched = True
+                break
+        if not matched:
+            remaining = remaining[1:]
+    return found
+
+
+def _text_to_vector(text: str) -> List[float]:
+    """Convert a pulse description text to a 4D 八纲 vector by summing keyword vectors."""
+    vec = [0.0, 0.0, 0.0, 0.0]
+    keywords = _extract_keywords(text)
+    for kw in keywords:
+        kw_vec = PULSE_KEYWORD_VECTORS[kw]
+        for i in range(4):
+            vec[i] += kw_vec[i]
+    return vec
+
+
+def _normalize_vector(vec: List[float]) -> List[float]:
+    """Normalize vector to [-1, 1] by dividing by max absolute value."""
+    max_abs = max(abs(v) for v in vec) if vec else 0
+    if max_abs == 0:
+        return [0.0, 0.0, 0.0, 0.0]
+    return [v / max_abs for v in vec]
+
+
+def _grid_to_vector(grid: Dict[str, Any]) -> List[float]:
+    """Convert an entire pulse grid to a weighted 4D 八纲 vector."""
     base_positions = [
         "cun-fu", "guan-fu", "chi-fu",
         "cun-zhong", "guan-zhong", "chi-zhong",
-        "cun-chen", "guan-chen", "chi-chen"
+        "cun-chen", "guan-chen", "chi-chen",
     ]
-    
-    has_left = any(current_grid.get(f"left-{p}") for p in base_positions)
-    has_right = any(current_grid.get(f"right-{p}") for p in base_positions)
-    
-    single_hand_mode = (has_left and not has_right) or (has_right and not has_left)
-    input_hand_prefix = "left-" if (has_left and not has_right) else "right-" if (has_right and not has_left) else None
-    
+    accumulated = [0.0, 0.0, 0.0, 0.0]
+    total_weight = 0.0
+
+    for prefix in ("left-", "right-", ""):
+        for pos in base_positions:
+            key = f"{prefix}{pos}" if prefix else pos
+            text = grid.get(key, "")
+            if not isinstance(text, str):
+                continue
+            text = text.strip()
+            if not text:
+                continue
+            # Determine depth weight from position name
+            depth = pos.split("-")[-1]  # fu / zhong / chen
+            weight = _DEPTH_WEIGHTS.get(depth, 1.0)
+            vec = _text_to_vector(text)
+            for i in range(4):
+                accumulated[i] += vec[i] * weight
+            total_weight += weight
+
+    # Overall description
+    overall = grid.get("overall_description", "")
+    if isinstance(overall, str) and overall.strip():
+        vec = _text_to_vector(overall.strip())
+        for i in range(4):
+            accumulated[i] += vec[i] * _OVERALL_WEIGHT
+        total_weight += _OVERALL_WEIGHT
+
+    if total_weight == 0:
+        return [0.0, 0.0, 0.0, 0.0]
+
+    # Average by total weight, then normalize
+    averaged = [accumulated[i] / total_weight for i in range(4)]
+    return _normalize_vector(averaged)
+
+
+def _vector_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+    """Compute similarity between two 4D vectors. Returns 0.0 ~ 1.0."""
+    dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(vec_a, vec_b)))
+    max_dist = math.sqrt(4 * (2.0 ** 2))  # 4.0
+    return 1.0 - (dist / max_dist)
+
+
+def search_similar_records(db: Session, current_grid: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Search for similar medical records based on 八纲辨证 vector similarity.
+    Converts pulse descriptions to 4D vectors [虚实, 阴阳, 表里, 寒热],
+    then recommends records with >= 90% similarity (difference <= 10%).
+    Only searches records that have a practitioner (teacher records) for learning reference.
+    """
+    if not current_grid:
+        return []
+
+    current_vec = _grid_to_vector(current_grid)
+    # Skip if input has no meaningful pulse data
+    if current_vec == [0.0, 0.0, 0.0, 0.0]:
+        return []
+
+    candidates = db.query(MedicalRecord).filter(
+        MedicalRecord.practitioner_id.isnot(None)
+    ).order_by(MedicalRecord.created_at.desc()).limit(200).all()
+
+    results = []
+    similarity_threshold = 0.90
+
     for record in candidates:
         if not record.data or "pulse_grid" not in record.data:
             continue
-            
+
         candidate_grid = record.data["pulse_grid"]
-        
-        def calculate_score(prefix_a, prefix_b):
-            sc = 0
-            m = []
-            for pos in base_positions:
-                key_a = f"{prefix_a}{pos}"
-                key_b = f"{prefix_b}{pos}"
-                val_a = current_grid.get(key_a, "").strip()
-                val_b = candidate_grid.get(key_b, "").strip()
-                
-                real_val_b = val_b
-                if not real_val_b:
-                    real_val_b = candidate_grid.get(pos, "").strip()
+        candidate_vec = _grid_to_vector(candidate_grid)
+        if candidate_vec == [0.0, 0.0, 0.0, 0.0]:
+            continue
 
-                if val_a and real_val_b:
-                    if val_a == real_val_b:
-                        sc += 10
-                        m.append(f"{key_a}=={key_b if val_b else pos}")
-                    elif val_a in real_val_b or real_val_b in val_a:
-                        sc += 5
-                        m.append(f"{key_a}~={key_b if val_b else pos}")
-            return sc, m
-
-        final_score = 0
-        final_matches = []
-
-        if single_hand_mode and input_hand_prefix:
-            score_l, matches_l = calculate_score(input_hand_prefix, "left-")
-            score_r, matches_r = calculate_score(input_hand_prefix, "right-")
-            if score_l >= score_r:
-                final_score, final_matches = score_l, matches_l
-            else:
-                final_score, final_matches = score_r, matches_r
-        else:
-            score_l, matches_l = calculate_score("left-", "left-")
-            score_r, matches_r = calculate_score("right-", "right-")
-            score_g, matches_g = calculate_score("", "")
-            final_score = score_l + score_r + score_g
-            final_matches = matches_l + matches_r + matches_g
-
-        overall1 = current_grid.get("overall_description", "").strip()
-        overall2 = candidate_grid.get("overall_description", "").strip()
-        if overall1 and overall2:
-            overlap = len(set(overall1).intersection(set(overall2)))
-            if overlap > 0:
-                final_score += overlap * 2
-                
-        if final_score > 0:
+        similarity = _vector_similarity(current_vec, candidate_vec)
+        if similarity >= similarity_threshold:
             patient = record.patient
             results.append({
                 "record_id": record.id,
                 "patient_name": patient.name if patient else "Unknown",
                 "visit_date": record.visit_date.strftime("%Y-%m-%d"),
-                "score": final_score,
+                "score": round(similarity * 100, 1),
+                "similarity": round(similarity, 4),
+                "vector": [round(v, 3) for v in candidate_vec],
                 "pulse_grid": candidate_grid,
-                "matches": final_matches,
-                "complaint": record.complaint
+                "complaint": record.complaint,
             })
-            
-    results.sort(key=lambda x: x["score"], reverse=True)
+
+    results.sort(key=lambda x: x["similarity"], reverse=True)
     return results[:5]

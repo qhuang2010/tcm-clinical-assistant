@@ -1,12 +1,13 @@
-from sqlalchemy.orm import Session
-from src.database.connection import SessionLocal
-from src.database.models import User
-from src.services import auth_service
 import sys
 import os
 
 # Ensure src is in python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sqlalchemy.orm import Session
+from src.database.connection import SessionLocal
+from src.database.models import User
+from src.services import auth_service
 
 def create_admin():
     db = SessionLocal()
