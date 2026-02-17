@@ -36,3 +36,12 @@ yarn-error.log
 *.db
 *.sqlite3
 sql_app.db
+
+# 用户数据
+data/annotations/
+data/uploads/
+
+# 杂项
+nul
+test_output.txt
+*_records.json

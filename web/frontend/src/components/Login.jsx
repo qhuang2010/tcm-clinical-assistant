@@ -50,43 +50,13 @@ const Login = ({ onLogin, onRegister, message }) => {
             zIndex: 9999,
         }}>
             <div style={cardStyle}>
-                {/* Logo/Icon Area */}
+                {/* Logo */}
                 <div style={logoContainerStyle}>
-                    <div style={logoStyle}>
-                        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }}>
-                            <defs>
-                                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style={{ stopColor: '#34c759', stopOpacity: 1 }} />
-                                    <stop offset="100%" style={{ stopColor: '#30d158', stopOpacity: 1 }} />
-                                </linearGradient>
-                            </defs>
-                            <circle cx="50" cy="50" r="45" fill="url(#grad1)" />
-                            {/* Nine-grid pattern */}
-                            <g fill="rgba(255,255,255,0.4)">
-                                <circle cx="30" cy="30" r="5" />
-                                <circle cx="50" cy="30" r="5" />
-                                <circle cx="70" cy="30" r="5" />
-                                <circle cx="30" cy="50" r="5" />
-                                <circle cx="50" cy="50" r="7" fill="rgba(255,255,255,0.9)" />
-                                <circle cx="70" cy="50" r="5" />
-                                <circle cx="30" cy="70" r="5" />
-                                <circle cx="50" cy="70" r="5" />
-                                <circle cx="70" cy="70" r="5" />
-                            </g>
-                            {/* Pulse wave */}
-                            <path
-                                d="M20 50 Q28 50 32 42 Q36 34 42 50 Q48 66 54 50 Q60 34 66 50 Q70 58 80 50"
-                                stroke="rgba(255,255,255,0.8)"
-                                strokeWidth="3"
-                                fill="none"
-                                strokeLinecap="round"
-                            />
-                        </svg>
-                    </div>
+                    <img src="/logo.png" alt="元气脉法" style={logoStyle} />
                 </div>
 
                 <div style={headerStyle}>
-                    <h2 style={titleStyle}>中医脉象九宫格</h2>
+                    <h2 style={titleStyle}>元气脉法传承系统</h2>
                     <p style={subtitleStyle}>智能病历录入系统</p>
                 </div>
 
@@ -145,7 +115,7 @@ const Login = ({ onLogin, onRegister, message }) => {
                 </button>
 
                 <div style={footerStyle}>
-                    <p>© 2026 中医脉象系统 · 专业医疗辅助工具</p>
+                    <p>© 2026 元气脉法传承系统 · 专业医疗辅助工具</p>
                 </div>
             </div>
         </div>
@@ -168,11 +138,11 @@ const logoContainerStyle = {
 };
 
 const logoStyle = {
-    width: '72px',
-    height: '72px',
-    borderRadius: '18px',
+    width: '88px',
+    height: '88px',
+    borderRadius: '20px',
     boxShadow: '0 8px 24px rgba(52, 199, 89, 0.3)',
-    overflow: 'hidden',
+    objectFit: 'cover',
 };
 
 const headerStyle = {

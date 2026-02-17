@@ -98,16 +98,19 @@ async def get_patient_latest_record(
             "phone": patient.phone
         },
         "medical_record": {},
-        "pulse_grid": {}
+        "pulse_grid": {},
+        "ai_analysis": None
     }
-    
+
     if latest_record and latest_record.data:
         record_data = latest_record.data
         if "medical_record" in record_data:
             response_data["medical_record"] = record_data["medical_record"]
         if "pulse_grid" in record_data:
             response_data["pulse_grid"] = record_data["pulse_grid"]
-            
+        if "ai_analysis" in record_data:
+            response_data["ai_analysis"] = record_data["ai_analysis"]
+
     return response_data
 
 @router.get("/{patient_id}/history")

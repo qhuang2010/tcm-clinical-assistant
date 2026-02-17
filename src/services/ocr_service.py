@@ -72,11 +72,7 @@ class OCRService:
             except Exception as e:
                 logger.warning(f"Vision LLM failed, falling back: {e}")
                 print(f"[OCR] Vision LLM error: {e}")
-                # Return error info so frontend can show it
-                return {
-                    "patient_info": {}, "image_width": w, "image_height": h,
-                    "method": "error", "error": str(e),
-                }
+                # Fall through to RapidOCR instead of returning error
 
         # Fallback: RapidOCR
         if self._rapid:
@@ -197,19 +193,43 @@ class OCRService:
         result, _ = self._rapid(np.array(img))
         # Best-effort: return raw text, frontend will show as-is
         info = {}
+        full_lines = []
         if result:
             texts = [text.strip() for _, text, _ in result if text.strip()]
+            full_lines = texts
             # Try to find common patterns
-            for t in texts:
+            for i, t in enumerate(texts):
                 if "姓名" in t:
-                    info["name"] = t.split("：")[-1].split(":")[-1].strip()
+                    val = t.split("：")[-1].split(":")[-1].strip()
+                    # Only use next line if it doesn't look like another label
+                    if not val and i + 1 < len(texts) and "：" not in texts[i + 1] and ":" not in texts[i + 1]:
+                        val = texts[i + 1].strip()
+                    if val:
+                        info["name"] = val
                 elif "性别" in t:
-                    info["gender"] = t.split("：")[-1].split(":")[-1].strip()
+                    val = t.split("：")[-1].split(":")[-1].strip()
+                    if not val and i + 1 < len(texts) and "：" not in texts[i + 1] and ":" not in texts[i + 1]:
+                        val = texts[i + 1].strip()
+                    if val:
+                        info["gender"] = val
                 elif "年龄" in t:
-                    info["age"] = t.split("：")[-1].split(":")[-1].strip()
+                    val = t.split("：")[-1].split(":")[-1].strip()
+                    if not val and i + 1 < len(texts) and "：" not in texts[i + 1] and ":" not in texts[i + 1]:
+                        val = texts[i + 1].strip()
+                    if val:
+                        info["age"] = val
                 elif "诊断" in t:
-                    info["diagnosis"] = t.split("：")[-1].split(":")[-1].strip()
-        return {"patient_info": info, "image_width": w, "image_height": h}
+                    val = t.split("：")[-1].split(":")[-1].strip()
+                    if not val and i + 1 < len(texts) and "：" not in texts[i + 1] and ":" not in texts[i + 1]:
+                        val = texts[i + 1].strip()
+                    if val:
+                        info["diagnosis"] = val
+        return {
+            "patient_info": info,
+            "full_text": "\n".join(full_lines),
+            "image_width": w,
+            "image_height": h,
+        }
 
     @staticmethod
     def _mock_regions() -> dict:

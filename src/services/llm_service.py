@@ -43,7 +43,7 @@ class LLMService:
         }
         
         try:
-            response = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=120)
             if response.status_code != 200:
                 print(f"Error Status Code: {response.status_code}")
                 print(f"Error Response Text: {response.text}")

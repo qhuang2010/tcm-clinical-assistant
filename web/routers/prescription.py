@@ -18,7 +18,7 @@ router = APIRouter(
 
 ocr_service = OCRService()
 
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp", "image/*", "application/octet-stream"}
 MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Directory for saving annotation training data
