@@ -82,7 +82,12 @@ const Sidebar = ({ token, onPatientSelect, onRecordSelect, lastUpdateTime }) => 
   };
 
   const handlePatientClick = async (patientId) => {
+    if (selectedPatientId === patientId) return; // Prevent unnecessary refetches
+
     setSelectedPatientId(patientId);
+    setSelectedRecordId(null);
+    setPatientHistory([]); // CLEAR OLD HISTORY IMMEDIATELY
+
     onPatientSelect(patientId);
 
     // Fetch visit history

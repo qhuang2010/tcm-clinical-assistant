@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
 
 const PulseGrid = ({ data, token, onChange, onSave, onLoadRecord }) => {
   const [similarRecords, setSimilarRecords] = useState([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
+  const userEditedRef = useRef(false);
 
   const leftPositions = [
     { label: '寸浮', id: 'left-cun-fu', hideLabel: true },
@@ -30,11 +31,15 @@ const PulseGrid = ({ data, token, onChange, onSave, onLoadRecord }) => {
   ];
 
   const handleCellChange = (id, value) => {
+    userEditedRef.current = true;
     onChange({ ...data, [id]: value });
   };
 
-  // Debounced search for similar records
+  // Debounced search for similar records - ONLY when user manually edits
   useEffect(() => {
+    if (!userEditedRef.current) {
+      return; // Skip search when data is loaded from backend
+    }
     const timer = setTimeout(() => {
       const hasData = Object.keys(data).length > 0;
       if (hasData) {
@@ -42,7 +47,8 @@ const PulseGrid = ({ data, token, onChange, onSave, onLoadRecord }) => {
       } else {
         setSimilarRecords([]);
       }
-    }, 1000);
+      userEditedRef.current = false;
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [data]);
@@ -79,7 +85,7 @@ const PulseGrid = ({ data, token, onChange, onSave, onLoadRecord }) => {
           className="overall-pulse-input"
           placeholder="例如：脉整体偏窄，显寒夹气血虚弱，空2分"
           value={data.overall_description || ''}
-          onChange={(e) => onChange({ ...data, overall_description: e.target.value })}
+          onChange={(e) => { userEditedRef.current = true; onChange({ ...data, overall_description: e.target.value }); }}
         />
       </div>
 

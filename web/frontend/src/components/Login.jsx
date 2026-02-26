@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 const Login = ({ onLogin, onRegister, message }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -12,12 +14,13 @@ const Login = ({ onLogin, onRegister, message }) => {
         setError('');
 
         try {
-            const formData = new FormData();
+            const formData = new URLSearchParams();
             formData.append('username', username);
             formData.append('password', password);
 
-            const response = await fetch('/api/auth/login', {
+            const response = await fetch(`${API_BASE}/api/auth/login`, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: formData,
             });
 

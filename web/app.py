@@ -58,7 +58,16 @@ async def read_root():
     # Serve the React app
     index_path = os.path.join(frontend_dist, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        with open(index_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return HTMLResponse(
+            content=content,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            }
+        )
     return HTMLResponse(content="<h1>Frontend build not found. Please run 'npm run build' in web/frontend</h1>", status_code=404)
 
 if __name__ == "__main__":

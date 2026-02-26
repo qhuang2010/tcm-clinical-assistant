@@ -57,17 +57,33 @@ def seed_data():
                 db.refresh(patient)
             
             # Create Medical Record
-            # Generate random pulse grid
+            # Generate random pulse grid using left-/right- prefixes as expected by the frontend PulseGrid component
             pulse_grid = {
-                "cun-fu": random.choice(pulse_options),
-                "guan-fu": random.choice(pulse_options),
-                "chi-fu": random.choice(pulse_options),
-                "cun-zhong": random.choice(pulse_options),
-                "guan-zhong": random.choice(pulse_options),
-                "chi-zhong": random.choice(pulse_options),
-                "cun-chen": random.choice(pulse_options),
-                "guan-chen": random.choice(pulse_options),
-                "chi-chen": random.choice(pulse_options),
+                # 左手
+                "left-cun-fu": random.choice(pulse_options),
+                "left-guan-fu": random.choice(pulse_options),
+                "left-chi-fu": random.choice(pulse_options),
+                "left-cun-zhong": random.choice(pulse_options),
+                "left-guan-zhong": random.choice(pulse_options),
+                "left-chi-zhong": random.choice(pulse_options),
+                "left-cun-chen": random.choice(pulse_options),
+                "left-guan-chen": random.choice(pulse_options),
+                "left-chi-chen": random.choice(pulse_options),
+                # 右手
+                "right-cun-fu": random.choice(pulse_options),
+                "right-guan-fu": random.choice(pulse_options),
+                "right-chi-fu": random.choice(pulse_options),
+                "right-cun-zhong": random.choice(pulse_options),
+                "right-guan-zhong": random.choice(pulse_options),
+                "right-chi-zhong": random.choice(pulse_options),
+                "right-cun-chen": random.choice(pulse_options),
+                "right-guan-chen": random.choice(pulse_options),
+                "right-chi-chen": random.choice(pulse_options),
+                "overall_description": random.choice([
+                    "脉整体偏细，寸关略弦", "脉沉迟无力，两尺尤弱",
+                    "脉浮数有力，寸关偏滑", "脉弦紧，关部明显",
+                    "脉缓弱，中取为主"
+                ]),
             }
             
             record_data = {

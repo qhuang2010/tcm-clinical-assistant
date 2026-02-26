@@ -103,9 +103,23 @@ function App() {
     setRecordPermission({ can_edit: true, can_delete: true, is_owner: true });
   };
 
+  const loadAbortRef = useRef(null);
+
   const handleLoadPatient = async (patientId) => {
+    // Abort any in-flight patient/record load request
+    if (loadAbortRef.current) loadAbortRef.current.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+
+    // Immediately clear old data
+    setMedicalRecord({ complaint: '', medicines: [], note: '' });
+    setPulseGrid({});
+    setAnalysisResult(null);
+    setCurrentRecordId(null);
+
     try {
-      const res = await authFetch(`/api/patients/${patientId}`);
+      const res = await authFetch(`/api/patients/${patientId}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (res.ok) {
         const data = await res.json();
         setPatientInfo({
@@ -115,18 +129,22 @@ function App() {
           age: data.age || '',
           phone: data.phone || ''
         });
-        setMedicalRecord({ complaint: '', medicines: [], note: '' });
-        setPulseGrid({});
-        setAnalysisResult(null);
       }
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error("Load patient failed", e);
     }
   };
 
   const handleLoadRecord = async (recordId) => {
+    // Abort any in-flight load request
+    if (loadAbortRef.current) loadAbortRef.current.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+
     try {
-      const res = await authFetch(`/api/records/${recordId}`);
+      const res = await authFetch(`/api/records/${recordId}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (res.ok) {
         const data = await res.json();
         // Set patient info from record response
@@ -139,6 +157,8 @@ function App() {
             phone: data.patient_info.phone || ''
           });
         }
+
+        // Ensure we always explicitly set medicalRecord and pulseGrid to prevent data bleeding
         if (data.medical_record) {
           const mr = { ...data.medical_record };
           // Backward compat: convert old string prescription to medicines array
@@ -149,8 +169,16 @@ function App() {
           // Preserve record id for delete operations
           mr.id = recordId;
           setMedicalRecord(mr);
+        } else {
+          setMedicalRecord({ complaint: '', medicines: [], note: '' });
         }
-        if (data.pulse_grid) setPulseGrid(data.pulse_grid);
+
+        if (data.pulse_grid) {
+          setPulseGrid(data.pulse_grid);
+        } else {
+          setPulseGrid({});
+        }
+
         // Load saved AI analysis
         if (data.ai_analysis) {
           setAnalysisResult(data.ai_analysis);
@@ -166,6 +194,7 @@ function App() {
         }
       }
     } catch (e) {
+      if (e.name === 'AbortError') return;
       console.error("Load record failed", e);
     }
   };
